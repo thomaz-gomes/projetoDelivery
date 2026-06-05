@@ -3,6 +3,7 @@ import express from 'express';
 import { prisma } from '../../prisma.js';
 import { authMiddleware, requireRole } from '../../auth.js';
 import { evoCreateInstance, evoGetStatus, evoGetQr, evoSendText, evoSetWebhook, evoDeleteInstance } from '../../wa.js';
+import { getEvolutionConfig } from '../../services/evolutionConfig.js';
 import { assertLimit } from '../../utils/saas.js';
 
 export const waRouter = express.Router();
@@ -258,8 +259,9 @@ waRouter.delete('/instances/:name', requireRole('ADMIN'), async (req, res) => {
 	let evoResult = null;
 	let evoError = null;
 
-	// Attempt to call Evolution API only if base URL is configured
-	if (process.env.EVOLUTION_API_BASE_URL) {
+	// Attempt to call Evolution API only if base URL is configured (DB > .env)
+	const evoCfg = await getEvolutionConfig();
+	if (evoCfg.baseUrl) {
 		const result = await evoDeleteInstance(name);
 		if (result.ok) {
 			evoResult = result;
@@ -267,8 +269,8 @@ waRouter.delete('/instances/:name', requireRole('ADMIN'), async (req, res) => {
 			evoError = result.error;
 		}
 	} else {
-		evoError = { message: 'EVOLUTION_API_BASE_URL not configured' };
-		console.warn('wa: skipping Evolution delete because EVOLUTION_API_BASE_URL is not set');
+		evoError = { message: 'Evolution API base URL não configurada' };
+		console.warn('wa: skipping Evolution delete because baseUrl not configured');
 	}
 
 	// Always attempt to remove local record(s)

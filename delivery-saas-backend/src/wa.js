@@ -1,19 +1,106 @@
 import axios from 'axios';
+import { getEvolutionConfig } from './services/evolutionConfig.js';
+import { prisma } from './prisma.js';
 
-const baseURL = process.env.EVOLUTION_API_BASE_URL;
-const apiKey  = process.env.EVOLUTION_API_API_KEY;
+// Axios instance é criada sob demanda a partir do SystemSetting (com fallback
+// para process.env). Quando a config muda via UI, evolutionConfig invalida o
+// cache interno e a próxima chamada aqui recria o `instance`.
+let cachedInstance = { baseUrl: null, apiKey: null, http: null };
 
-if (!baseURL) {
-  console.warn('EVOLUTION_API_BASE_URL is not set. Evolution API calls will fail.');
+// Trim do EvolutionRequestLog: mantém só as últimas N entradas.
+// Roda probabilisticamente (~2% dos writes) para evitar overhead em cada chamada.
+const LOG_MAX_ROWS = 1000;
+async function maybeTrimLogs() {
+  if (Math.random() > 0.02) return;
+  try {
+    const total = await prisma.evolutionRequestLog.count();
+    if (total <= LOG_MAX_ROWS) return;
+    const cutoff = await prisma.evolutionRequestLog.findFirst({
+      orderBy: { id: 'desc' },
+      skip: LOG_MAX_ROWS - 1,
+      select: { id: true },
+    });
+    if (!cutoff) return;
+    await prisma.evolutionRequestLog.deleteMany({ where: { id: { lt: cutoff.id } } });
+  } catch {
+    // best-effort
+  }
 }
-if (!apiKey) {
-  console.warn('EVOLUTION_API_API_KEY is not set. Evolution API calls may be unauthorized.');
+
+function logEvolutionCall(row) {
+  prisma.evolutionRequestLog.create({ data: row })
+    .then(() => maybeTrimLogs())
+    .catch(() => { /* nunca derruba a request principal */ });
 }
 
-const http = axios.create({
-  baseURL: baseURL || undefined,
-  timeout: 60000, // ⏱️ 60 segundos para conexões lentas
-  headers: { apikey: apiKey || '', 'Content-Type': 'application/json' },
+async function buildHttp() {
+  const cfg = await getEvolutionConfig();
+  if (!cfg.baseUrl) {
+    console.warn('Evolution: baseUrl não configurada (SystemSetting nem .env).');
+  }
+  if (!cfg.apiKey) {
+    console.warn('Evolution: apiKey não configurada (SystemSetting nem .env).');
+  }
+  if (cachedInstance.http
+      && cachedInstance.baseUrl === cfg.baseUrl
+      && cachedInstance.apiKey === cfg.apiKey) {
+    return cachedInstance.http;
+  }
+  const inst = axios.create({
+    baseURL: cfg.baseUrl || undefined,
+    timeout: 60000,
+    headers: { apikey: cfg.apiKey || '', 'Content-Type': 'application/json' },
+  });
+  inst.interceptors.request.use((req) => {
+    req.metadata = { startAt: Date.now() };
+    return req;
+  });
+  inst.interceptors.response.use(
+    (res) => {
+      const dur = Date.now() - (res.config?.metadata?.startAt || Date.now());
+      logEvolutionCall({
+        operation: res.config?._op || 'http',
+        method: (res.config?.method || 'GET').toUpperCase(),
+        endpoint: res.config?.url || '',
+        instanceName: res.config?._instance || null,
+        status: res.status,
+        durationMs: dur,
+        error: null,
+      });
+      return res;
+    },
+    (err) => {
+      const c = err.config || {};
+      const dur = Date.now() - (c.metadata?.startAt || Date.now());
+      const msg = err?.response?.data?.message
+        || (err?.response?.data ? JSON.stringify(err.response.data).slice(0, 500) : null)
+        || err?.message
+        || 'unknown';
+      logEvolutionCall({
+        operation: c._op || 'http',
+        method: (c.method || 'GET').toUpperCase(),
+        endpoint: c.url || '',
+        instanceName: c._instance || null,
+        status: err?.response?.status || null,
+        durationMs: dur,
+        error: String(msg).slice(0, 500),
+      });
+      return Promise.reject(err);
+    }
+  );
+  cachedInstance = { baseUrl: cfg.baseUrl, apiKey: cfg.apiKey, http: inst };
+  return inst;
+}
+
+// Proxy preserva o shape `http.post(url, body, cfg?)` sem precisar reescrever
+// chamadores. Cada acesso resolve a instância atual e delega.
+const http = new Proxy({}, {
+  get(_target, prop) {
+    return async (...args) => {
+      const inst = await buildHttp();
+      return inst[prop](...args);
+    };
+  },
 });
 
 // Evolution exposes 3-4 endpoint variants for each send operation; only one
@@ -34,7 +121,7 @@ async function trySendWithCache(op, instanceName, attempts) {
     const a = order[i];
     try {
       console.log(`${op} -> trying ${a.url} instance=${instanceName} ${a.logExtra || ''}`);
-      const { data } = await http.post(a.url, a.body);
+      const { data } = await http.post(a.url, a.body, { _op: op, _instance: instanceName });
       console.log(`${op} -> success ${a.url} instance=${instanceName}`);
       // Cache the original index (not the reordered index) so future calls
       // skip the failed variants entirely.
@@ -99,7 +186,7 @@ export async function evoSetWebhook(instanceName) {
     return null;
   }
   try {
-    const { data } = await http.post(`/webhook/set/${encodeURIComponent(instanceName)}`, { webhook: config });
+    const { data } = await http.post(`/webhook/set/${encodeURIComponent(instanceName)}`, { webhook: config }, { _op: 'evoSetWebhook', _instance: instanceName });
     console.log(`[evo] ✅ Webhook registered for ${instanceName} → ${config.url}`);
     return data;
   } catch (e) {
@@ -111,7 +198,7 @@ export async function evoSetWebhook(instanceName) {
 // Delete instance from Evolution API
 export async function evoDeleteInstance(instanceName) {
   try {
-    const { data } = await http.delete(`/instance/delete/${encodeURIComponent(instanceName)}`);
+    const { data } = await http.delete(`/instance/delete/${encodeURIComponent(instanceName)}`, { _op: 'evoDeleteInstance', _instance: instanceName });
     return { ok: true, data };
   } catch (e) {
     const err = { message: e.message, status: e.response?.status || null, body: e.response?.data || null };
@@ -135,7 +222,7 @@ export async function evoCreateInstance(payload) {
     ...payload,
   };
   try {
-    const { data } = await http.post('/instance/create', body);
+    const { data } = await http.post('/instance/create', body, { _op: 'evoCreateInstance', _instance: body?.instanceName || null });
     return data;
   } catch (e) {
     // Normalize error to include useful message
@@ -148,7 +235,7 @@ export async function evoCreateInstance(payload) {
 
 // ✅ usa /instance/connectionState/{instance} e lê instance.state
 export async function evoGetStatus(instanceName) {
-  const { data } = await http.get(`/instance/connectionState/${encodeURIComponent(instanceName)}`);
+  const { data } = await http.get(`/instance/connectionState/${encodeURIComponent(instanceName)}`, { _op: 'evoGetStatus', _instance: instanceName });
   const rawState =
     data?.status ??
     data?.state ??
@@ -163,7 +250,7 @@ export async function evoGetStatus(instanceName) {
 
 // ✅ usa /instance/connect/{instance} para obter QR (base64/qrcode/…)
 export async function evoGetQr(instanceName) {
-  const resp = await http.get(`/instance/connect/${encodeURIComponent(instanceName)}`);
+  const resp = await http.get(`/instance/connect/${encodeURIComponent(instanceName)}`, { _op: 'evoGetQr', _instance: instanceName });
   const data = resp.data;
 
   // Se a Evolution ainda não gerou QR, retorna nulo

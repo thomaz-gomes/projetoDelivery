@@ -18,11 +18,18 @@ const router = Router()
 
 // Evolution v2 webhooks may not include an apikey header. Validate only
 // when one is supplied (e.g. manual test) so the public path stays open.
-router.use((req, res, next) => {
-  const expected = process.env.EVOLUTION_API_API_KEY
+router.use(async (req, res, next) => {
   const provided = req.headers['apikey'] || req.headers['Apikey'] || req.query.apikey
-  if (provided && expected && provided !== expected) {
-    return res.status(401).json({ error: 'Unauthorized' })
+  if (!provided) return next()
+  try {
+    const { getEvolutionConfig } = await import('../services/evolutionConfig.js')
+    const cfg = await getEvolutionConfig()
+    const expected = cfg.apiKey
+    if (expected && provided !== expected) {
+      return res.status(401).json({ error: 'Unauthorized' })
+    }
+  } catch (e) {
+    console.warn('webhookEvolution: failed to read Evolution config', e?.message)
   }
   next()
 })

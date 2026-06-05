@@ -85,7 +85,8 @@ export const nav = [
     // Cada canal (WhatsApp, Messenger, Instagram) é uma App Meta independente
     // — credenciais e configuração próprias. Por ora só WhatsApp Cloud está
     // em escopo; novas entradas surgem aqui conforme outros canais entrarem.
-    { name: 'WhatsApp Cloud', to: '/saas/whatsapp-config', icon: 'bi bi-whatsapp' }
+    { name: 'WhatsApp Cloud', to: '/saas/whatsapp-config', icon: 'bi bi-whatsapp' },
+    { name: 'Evolution API', to: '/saas/evolution-config', icon: 'bi bi-whatsapp' }
   ] }
 ];
 

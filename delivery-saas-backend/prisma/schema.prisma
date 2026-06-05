@@ -2818,6 +2818,23 @@ model SystemSetting {
   updatedBy String? // userId de quem fez a última alteração
 }
 
+// Buffer rotativo dos últimos eventos de chamada para a Evolution API.
+// Alimenta o painel /saas/evolution-config para diagnóstico rápido.
+model EvolutionRequestLog {
+  id           BigInt   @id @default(autoincrement())
+  createdAt    DateTime @default(now())
+  operation    String // ex: "evoSendText", "fetchInstances"
+  method       String // GET, POST, ...
+  endpoint     String // caminho relativo na Evolution
+  instanceName String?
+  status       Int? // HTTP status (null em erros de rede)
+  durationMs   Int?
+  error        String? // mensagem do erro quando status >= 400 ou rede caiu
+
+  @@index([createdAt])
+  @@index([operation, createdAt])
+}
+
 model MercadoPagoConfig {
   id           String   @id @default(uuid())
   companyId    String   @unique

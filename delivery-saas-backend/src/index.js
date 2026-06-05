@@ -68,6 +68,7 @@ import startReportsCleanup from './cleanupReports.js';
 import startForceOpenCleanup from './cleanupForceOpen.js';
 import saasRouter from './routes/saas.js'
 import adminMetaConfigRouter from './routes/adminMetaConfig.js'
+import adminEvolutionConfigRouter from './routes/adminEvolutionConfig.js'
 import { requireModule } from './modules.js'
 import financialRouter from './routes/financial/index.js'
 import metaPixelRouter from './routes/metaPixel.js'
@@ -303,6 +304,8 @@ app.use('/agent-print', requireModule('printing'), agentPrintRouter);
 app.use('/saas', saasRouter);
 // Admin: Meta App config (SUPER_ADMIN only — gated inside the router)
 app.use('/admin', adminMetaConfigRouter);
+// Admin: Evolution API config (SUPER_ADMIN only — gated inside the router)
+app.use('/admin', adminEvolutionConfigRouter);
 // Tenant Meta OAuth flow (Pages / Instagram / WhatsApp WABA)
 app.use(metaOauthRouter);
 // Templates Meta WA: cache + sync (UI gerencia, /meta/templates*)

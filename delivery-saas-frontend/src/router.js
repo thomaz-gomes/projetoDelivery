@@ -101,6 +101,7 @@ const SaasGatewayConfig = () => import('./views/SaasGatewayConfig.vue')
 const SaasSuperAdmins = () => import('./views/SaasSuperAdmins.vue')
 const AdminBilling = () => import('./views/AdminBilling.vue')
 const WhatsAppPlatformConfig = () => import('./views/admin/WhatsAppPlatformConfig.vue')
+const EvolutionApiConfig = () => import('./views/admin/EvolutionApiConfig.vue')
 import CashbackSettings from './views/cashback/CashbackSettings.vue';
 import NfeEmissao from './views/NfeEmissao.vue';
 import NfeEmissoesRelatorio from './views/NfeEmissoesRelatorio.vue';
@@ -327,6 +328,7 @@ const router = createRouter({
   ,{ path: '/saas/super-admins', component: SaasSuperAdmins, meta: { requiresAuth: true, role: 'MASTER' } }
   ,{ path: '/saas/error-logs', component: SaasErrorLogs, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/whatsapp-config', component: WhatsAppPlatformConfig, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
+  ,{ path: '/saas/evolution-config', component: EvolutionApiConfig, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } }
   ,{ path: '/saas/meta-config', redirect: (to) => ({ path: '/saas/whatsapp-config', query: to.query, hash: to.hash }) }
   ,{ path: '/saas', component: SaasAdmin, meta: { requiresAuth: true, role: 'SUPER_ADMIN' } },
     { path: '/settings/cashback', component: CashbackSettings, meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'CASHBACK' } },
@@ -579,6 +581,7 @@ const PAGE_TITLES = [
   ['/saas/super-admins', 'Super Admins'],
   ['/saas/error-logs', 'Logs de erro'],
   ['/saas/whatsapp-config', 'WhatsApp Cloud · Plataforma'],
+  ['/saas/evolution-config', 'Evolution API · Plataforma'],
   ['/saas', 'SaaS Admin'],
   ['/store', 'Loja de Complementos'],
   ['/affiliate', 'Painel de Afiliado'],

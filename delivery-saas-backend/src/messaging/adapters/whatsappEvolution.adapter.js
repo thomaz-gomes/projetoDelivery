@@ -414,8 +414,10 @@ async function saveBase64Media(base64, companyId, mimeType) {
 }
 
 async function downloadMediaViaEvolution(instanceName, msg, companyId, mimeType) {
-  const baseURL = process.env.EVOLUTION_API_BASE_URL
-  const apiKey = process.env.EVOLUTION_API_API_KEY
+  const { getEvolutionConfig } = await import('../../services/evolutionConfig.js')
+  const cfg = await getEvolutionConfig()
+  const baseURL = cfg.baseUrl
+  const apiKey = cfg.apiKey
   if (!baseURL || !apiKey) throw new Error('Evolution API not configured')
 
   const url = `${baseURL.replace(/\/$/, '')}/chat/getBase64FromMediaMessage/${encodeURIComponent(instanceName)}`
