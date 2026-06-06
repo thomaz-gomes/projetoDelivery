@@ -72,8 +72,36 @@
           </div>
         </div>
       </div>
-      <!-- banner card (T9 will replace with real markup) -->
-      <BannerSection v-model="form" />
+      <!-- banner card -->
+      <div class="card mb-3">
+        <div class="card-body">
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="bannerOn" v-model="form.bannerEnabled" />
+            <label class="form-check-label" for="bannerOn"><strong>Faixa promocional</strong></label>
+          </div>
+
+          <div v-if="form.bannerEnabled" class="row">
+            <div class="col-lg-7">
+              <div class="mb-3">
+                <label class="form-label">Texto</label>
+                <textarea class="form-control" rows="2" maxlength="200" v-model="form.bannerText"></textarea>
+                <small class="text-muted">{{ (form.bannerText || '').length }}/200</small>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Cor de fundo</label>
+                <input type="color" class="form-control form-control-color" v-model="form.bannerBgColor" />
+              </div>
+            </div>
+            <div class="col-lg-5">
+              <div class="text-muted small mb-1">Preview</div>
+              <div class="px-3 py-2 text-center"
+                   :style="{ background: form.bannerBgColor, color: contrastTextColor(form.bannerBgColor) }">
+                {{ form.bannerText || 'Sua mensagem aqui' }}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div class="position-sticky bottom-0 bg-white py-3 border-top">
         <button class="btn btn-primary" :disabled="saving" @click="save">
@@ -93,9 +121,12 @@ import SelectInput from '../../components/form/select/SelectInput.vue'
 import TextInput from '../../components/form/input/TextInput.vue'
 import { assetUrl } from '../../utils/assetUrl.js'
 
-// Banner section is added in T9 — for this step, render placeholder div.
-const BannerSection = {
-  template: '<div class="card mb-3"><div class="card-body">banner-here</div></div>',
+function contrastTextColor(hex) {
+  if (!hex || !/^#[0-9A-Fa-f]{6}$/.test(hex)) return '#fff'
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return ((r * 299 + g * 587 + b * 114) / 1000) >= 128 ? '#111' : '#fff'
 }
 
 const menus = ref([])
