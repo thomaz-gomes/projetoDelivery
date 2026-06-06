@@ -15,6 +15,7 @@ import { evaluateDiscountRule } from '../utils/paymentDiscount.js'
 import { findNeighborhoodMatch } from '../utils/neighborhoodMatch.js'
 import { resolveNeighborhood } from '../services/neighborhoodResolver.js'
 import { attributeOrderToCampaign } from '../services/marketing/attribution.js'
+import { buildPublicAnnouncement } from '../services/menuAnnouncementService.js'
 
 export const publicMenuRouter = express.Router()
 
@@ -295,7 +296,7 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
           } catch (e) { /* ignore */ }
           // if a menu is linked to store and no explicit menuId provided, try to resolve a default menu for the store
           if (!menuId) {
-            const menuForStore = await prisma.menu.findFirst({ where: { storeId: store.id, isActive: true }, orderBy: { position: 'asc' } })
+            const menuForStore = await prisma.menu.findFirst({ where: { storeId: store.id, isActive: true }, orderBy: { position: 'asc' }, include: { announcement: true } })
               if (menuForStore) {
                 // load categories scoped only to that specific store menu
                 // do not include company-shared categories (menuId == null) to avoid
@@ -341,7 +342,7 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
                   }
                 })
                 // expose the chosen menu so the frontend can show menu-specific images
-                menuObj = { id: menuForStore.id, storeId: menuForStore.storeId || store.id, name: menuForStore.name, description: menuForStore.description, logo: menuForStore.logoUrl || null, banner: menuForStore.bannerUrl || null, catalogMode: !!menuForStore.catalogMode }
+                menuObj = { id: menuForStore.id, storeId: menuForStore.storeId || store.id, name: menuForStore.name, description: menuForStore.description, logo: menuForStore.logoUrl || null, banner: menuForStore.bannerUrl || null, catalogMode: !!menuForStore.catalogMode, announcement: buildPublicAnnouncement(menuForStore.announcement) }
               }
           }
         }
@@ -535,8 +536,8 @@ publicMenuRouter.get('/:companyId/menu', async (req, res) => {
     try {
       let m = null
       if (menuId) {
-        m = await prisma.menu.findUnique({ where: { id: menuId }, select: { id: true, storeId: true, name: true, description: true, logoUrl: true, bannerUrl: true, address: true, phone: true, whatsapp: true, timezone: true, weeklySchedule: true, open24Hours: true, allowDelivery: true, allowPickup: true, catalogMode: true, isActive: true } })
-        if (m) menuObj = { id: m.id, storeId: m.storeId || null, name: m.name, description: m.description, logo: m.logoUrl || null, banner: m.bannerUrl || null, address: m.address || null, phone: m.phone || null, whatsapp: m.whatsapp || null, timezone: m.timezone || null, weeklySchedule: m.weeklySchedule || null, open24Hours: !!m.open24Hours, allowDelivery: m.allowDelivery !== undefined ? !!m.allowDelivery : true, allowPickup: m.allowPickup !== undefined ? !!m.allowPickup : true, catalogMode: !!m.catalogMode, isActive: m.isActive !== undefined ? !!m.isActive : true }
+        m = await prisma.menu.findUnique({ where: { id: menuId }, select: { id: true, storeId: true, name: true, description: true, logoUrl: true, bannerUrl: true, address: true, phone: true, whatsapp: true, timezone: true, weeklySchedule: true, open24Hours: true, allowDelivery: true, allowPickup: true, catalogMode: true, isActive: true, announcement: true } })
+        if (m) menuObj = { id: m.id, storeId: m.storeId || null, name: m.name, description: m.description, logo: m.logoUrl || null, banner: m.bannerUrl || null, address: m.address || null, phone: m.phone || null, whatsapp: m.whatsapp || null, timezone: m.timezone || null, weeklySchedule: m.weeklySchedule || null, open24Hours: !!m.open24Hours, allowDelivery: m.allowDelivery !== undefined ? !!m.allowDelivery : true, allowPickup: m.allowPickup !== undefined ? !!m.allowPickup : true, catalogMode: !!m.catalogMode, isActive: m.isActive !== undefined ? !!m.isActive : true, announcement: buildPublicAnnouncement(m.announcement) }
       }
       // load menu-level settings from the store's settings file (settings/stores/<storeId>/settings.json)
       if (menuObj && menuObj.id) {

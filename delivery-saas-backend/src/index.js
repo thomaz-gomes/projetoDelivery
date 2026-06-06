@@ -32,6 +32,7 @@ import menuAdminRouter from './routes/menu.js'
 import menuOptionsRouter from './routes/menuOptions.js'
 import menuImportRouter from './routes/menuImport.js'
 import menuIntegrationRouter from './routes/menuIntegration.js'
+import menuAnnouncementsRouter from './routes/menuAnnouncements.js'
 import { nfeRouter } from './routes/nfe.js'
 import companiesRouter from './routes/companies.js'
 import storesRouter from './routes/stores.js'
@@ -276,6 +277,7 @@ app.use('/menu', menuAdminRouter);
 app.use('/menu/options', menuOptionsRouter);
 app.use('/menu', menuImportRouter);
 app.use('/menu/integration', menuIntegrationRouter);
+app.use('/menu-announcements', menuAnnouncementsRouter);
 app.use('/nfe', requireModule('nfe'), nfeRouter);
 app.use('/settings', companiesRouter);
 // Mount menu admin router also under /settings to provide backward-compatible

@@ -854,6 +854,30 @@ model Menu {
   // QuickReply.menus = global (aparece em todas as conversas).
   scopedQuickReplies              QuickReply[]          @relation("QuickReplyMenus")
   marketingCampaignsBySegmentMenu MarketingCampaign[]   @relation("MarketingCampaignSegmentMenu")
+  announcement                    MenuAnnouncement?
+}
+
+model MenuAnnouncement {
+  id              String   @id @default(uuid())
+  menuId          String   @unique
+  menu            Menu     @relation(fields: [menuId], references: [id], onDelete: Cascade)
+
+  // ---- Popup (modal 1x/dia) ----
+  popupEnabled    Boolean  @default(false)
+  popupTitle      String?
+  popupMessage    String   @default("")
+  popupButtonText String?
+  popupCtaUrl     String?
+  popupCtaLabel   String?
+  popupImageUrl   String?
+
+  // ---- Banner (faixa topo PublicMenu) ----
+  bannerEnabled   Boolean  @default(false)
+  bannerText      String   @default("")
+  bannerBgColor   String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 model CustomDomain {
