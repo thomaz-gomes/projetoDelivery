@@ -1269,6 +1269,27 @@
             </div>
           </div>
         </div>
+
+        <!-- Promotional announcement popup (daily-dismiss) -->
+        <div v-if="showAnnouncementPopup" class="modal fade show d-block" style="background:rgba(0,0,0,.5);z-index:11200" tabindex="-1">
+          <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+              <div class="modal-body text-center">
+                <img v-if="announcement.popupImageUrl" :src="announcement.popupImageUrl" class="img-fluid mb-3" />
+                <h5 v-if="announcement.popupTitle" class="mb-2">{{ announcement.popupTitle }}</h5>
+                <p style="white-space:pre-wrap">{{ announcement.popupMessage }}</p>
+              </div>
+              <div class="modal-footer">
+                <a v-if="announcement.popupCtaUrl && announcement.popupCtaLabel"
+                   :href="announcement.popupCtaUrl" target="_blank" rel="noopener"
+                   class="btn btn-outline-secondary">{{ announcement.popupCtaLabel }}</a>
+                <button class="btn btn-primary" @click="dismissAnnouncementPopup">
+                  {{ announcement.popupButtonText || 'Entendi' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </template>
 
 <script setup>
@@ -1335,6 +1356,28 @@ const announcementBarTextColor = computed(() => {
   const b = parseInt(hex.slice(5,7), 16)
   return ((r*299 + g*587 + b*114) / 1000) >= 128 ? '#111' : '#fff'
 })
+// Announcement popup (daily-dismiss, reset when admin edits — version = updatedAt)
+const showAnnouncementPopup = ref(false)
+function announcementDismissKey() {
+  return `menu_announcement_dismiss_${menu.value?.id || 'unknown'}`
+}
+function evalAnnouncementPopup() {
+  if (!announcement.value?.popupEnabled) return
+  const today = new Date().toISOString().slice(0, 10)
+  const version = announcement.value.updatedAt
+  let stored = {}
+  try { stored = JSON.parse(localStorage.getItem(announcementDismissKey()) || '{}') } catch {}
+  if (stored.date === today && stored.version === version) return
+  setTimeout(() => { showAnnouncementPopup.value = true }, 400)
+}
+function dismissAnnouncementPopup() {
+  showAnnouncementPopup.value = false
+  const today = new Date().toISOString().slice(0, 10)
+  const version = announcement.value?.updatedAt
+  try {
+    localStorage.setItem(announcementDismissKey(), JSON.stringify({ date: today, version }))
+  } catch {}
+}
 // Offline mode state
 const isOffline = ref(false);         // true when network is unavailable and we're showing cached data
 const dataSource = ref('network');    // 'cache' | 'network'
@@ -4428,6 +4471,7 @@ function applyMenuPayload(data) {
   }
   menu.value = data.menu || null
   announcement.value = (data.menu && data.menu.announcement) || null
+  try { evalAnnouncementPopup() } catch(e) { console.warn('evalAnnouncementPopup failed', e) }
   // Initialize Meta Pixel if configured for this menu
   try{ if(data.metaPixel) initMetaPixel(data.metaPixel) }catch(e){ console.warn('Meta Pixel init failed', e) }
   try{
