@@ -41,7 +41,12 @@ for var in API_DOMAIN APP_DOMAIN SSL_EMAIL POSTGRES_PASSWORD JWT_SECRET; do
     fi
 done
 
-echo -e "${YELLOW}Domínios: API=${API_DOMAIN} | APP=${APP_DOMAIN}${NC}"
+# ROOT_DOMAIN é opcional — se ausente, deriva do APP_DOMAIN removendo o 1º subdomínio
+if [ -z "$ROOT_DOMAIN" ]; then
+    ROOT_DOMAIN="${APP_DOMAIN#*.}"
+fi
+
+echo -e "${YELLOW}Domínios: API=${API_DOMAIN} | APP=${APP_DOMAIN} | ROOT=${ROOT_DOMAIN}${NC}"
 echo ""
 
 # =========================================
@@ -117,6 +122,7 @@ rm -f /etc/caddy/Caddyfile
 # Gerar Caddyfile substituindo placeholders pelos domínios reais
 sed -e "s/API_DOMAIN_PLACEHOLDER/${API_DOMAIN}/g" \
     -e "s/APP_DOMAIN_PLACEHOLDER/${APP_DOMAIN}/g" \
+    -e "s/ROOT_DOMAIN_PLACEHOLDER/${ROOT_DOMAIN}/g" \
     -e "s/SSL_EMAIL_PLACEHOLDER/${SSL_EMAIL}/g" \
     "$DEPLOY_DIR/caddy/Caddyfile" > /etc/caddy/Caddyfile
 
