@@ -1,16 +1,20 @@
 <template>
-  <div class="container py-4">
-    <h2 class="mb-3">Avisos no Cardápio</h2>
-
-    <div class="row mb-4">
-      <div class="col-md-6">
-        <label class="form-label">Cardápio</label>
-        <SelectInput v-model="menuId" @update:modelValue="loadAnnouncement">
-          <option v-if="!menus.length" value="">Nenhum cardápio disponível</option>
-          <option v-for="m in menus" :key="m.id" :value="m.id">{{ m.name }}</option>
-        </SelectInput>
+  <ListCard
+    title="Avisos no Cardápio"
+    icon="bi bi-megaphone"
+    subtitle="Configure o modal de aviso e a faixa promocional exibidos no cardápio público."
+  >
+    <template #filters>
+      <div class="row">
+        <div class="col-md-6">
+          <label class="form-label">Cardápio</label>
+          <SelectInput v-model="menuId" @update:modelValue="loadAnnouncement">
+            <option v-if="!menus.length" value="">Nenhum cardápio disponível</option>
+            <option v-for="m in menus" :key="m.id" :value="m.id">{{ m.name }}</option>
+          </SelectInput>
+        </div>
       </div>
-    </div>
+    </template>
 
     <div v-if="loading" class="text-muted">
       <span class="spinner-border spinner-border-sm me-2"></span> Carregando...
@@ -48,7 +52,9 @@
                 <label class="form-label d-block"><strong>Imagem (opcional)</strong></label>
                 <div v-if="form.popupImageUrl" class="mb-2">
                   <img :src="assetUrl(form.popupImageUrl)" class="img-thumbnail" style="max-width:200px" />
-                  <button class="btn btn-sm btn-outline-danger ms-2" :disabled="uploading" @click="removeImage">Remover</button>
+                  <BaseButton variant="outline" size="sm" class="ms-2" :disabled="uploading" @click="removeImage">
+                    Remover
+                  </BaseButton>
                 </div>
                 <input type="file" class="form-control" accept="image/png,image/jpeg,image/webp" :disabled="uploading" @change="uploadImage" />
                 <small v-if="uploading" class="text-muted">Enviando...</small>
@@ -72,6 +78,7 @@
           </div>
         </div>
       </div>
+
       <!-- banner card -->
       <div class="card mb-3">
         <div class="card-body">
@@ -102,21 +109,22 @@
           </div>
         </div>
       </div>
+    </template>
 
-      <div class="position-sticky bottom-0 bg-white py-3 border-top">
-        <button class="btn btn-primary" :disabled="saving" @click="save">
-          <span v-if="saving" class="spinner-border spinner-border-sm me-1"></span>
-          {{ saving ? 'Salvando...' : 'Salvar' }}
-        </button>
+    <template #footer>
+      <div v-if="menuId" class="d-flex justify-content-end">
+        <BaseButton variant="primary" :loading="saving" @click="save">Salvar</BaseButton>
       </div>
     </template>
-  </div>
+  </ListCard>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import Swal from 'sweetalert2'
 import api from '../../api'
+import ListCard from '../../components/ListCard.vue'
+import BaseButton from '../../components/BaseButton.vue'
 import SelectInput from '../../components/form/select/SelectInput.vue'
 import TextInput from '../../components/form/input/TextInput.vue'
 import { assetUrl } from '../../utils/assetUrl.js'
@@ -220,7 +228,6 @@ async function uploadImage(e) {
     })
   } finally {
     uploading.value = false
-    // reset input so re-selecting the same file fires @change
     try { e.target.value = '' } catch (_) {}
   }
 }
