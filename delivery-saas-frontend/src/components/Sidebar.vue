@@ -876,14 +876,7 @@ function selectMenuOption(opt){
               </ul>
             </template>
           </li>
-          <li class="mt-auto pt-2">
-            <hr class="text-white opacity-25">
-            <router-link to="/billing" class="nav-link d-flex align-items-center mb-2" @click="offCanvasOpen = false">
-              <i class="bi bi-receipt-cutoff me-2"></i> Cobranças
-              <span v-if="addOnStore.pendingInvoiceCount" class="badge bg-danger ms-2">{{ addOnStore.pendingInvoiceCount }}</span>
-            </router-link>
-            <AiCreditsWidget compact v-if="auth.user?.companyId" />
-          </li>
+          <li class="mt-auto pt-2"></li>
         </ul>
       </nav>
     </div>

@@ -32,6 +32,9 @@ onMounted(load)
 <template>
   <ListCard :title="`Campanhas (${campaigns.length})`" icon="bi bi-broadcast">
     <template #actions>
+      <router-link to="/marketing/segments" class="btn btn-outline-secondary">
+        <i class="bi bi-people me-1"></i>Segmentos
+      </router-link>
       <BaseButton variant="primary" icon="+" @click="router.push('/marketing/campaigns/new')">
         Nova campanha
       </BaseButton>
