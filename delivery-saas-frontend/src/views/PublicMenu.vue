@@ -16,6 +16,15 @@
       </div>
     </div>
 
+    <!-- Promotional announcement banner -->
+    <div
+      v-if="announcement?.bannerEnabled && announcement.bannerText"
+      class="menu-announcement-bar text-center px-3 py-2"
+      :style="{ background: announcement.bannerBgColor || '#0d6efd', color: announcementBarTextColor }"
+    >
+      {{ announcement.bannerText }}
+    </div>
+
     <!-- Hero banner -->
   <div class="public-hero position-relative text-white" ref="heroRef">
     <div class="hero-image" :style="{ backgroundImage: 'url(' + heroBannerUrl + ')' , backgroundSize: 'cover', backgroundPosition: 'center'}" style="position:absolute;inset:0"></div>
@@ -1316,6 +1325,16 @@ const uncategorized = ref([]);
 const paymentMethods = ref([]);
 const company = ref(null)
 const menu = ref(null)
+// Promotional announcement (banner + popup) from the public menu payload
+const announcement = ref(null)
+const announcementBarTextColor = computed(() => {
+  const hex = announcement.value?.bannerBgColor
+  if (!hex || !/^#[0-9A-Fa-f]{6}$/.test(hex)) return '#fff'
+  const r = parseInt(hex.slice(1,3), 16)
+  const g = parseInt(hex.slice(3,5), 16)
+  const b = parseInt(hex.slice(5,7), 16)
+  return ((r*299 + g*587 + b*114) / 1000) >= 128 ? '#111' : '#fff'
+})
 // Offline mode state
 const isOffline = ref(false);         // true when network is unavailable and we're showing cached data
 const dataSource = ref('network');    // 'cache' | 'network'
@@ -4408,6 +4427,7 @@ function applyMenuPayload(data) {
     customer.value.address.state = company.value.state
   }
   menu.value = data.menu || null
+  announcement.value = (data.menu && data.menu.announcement) || null
   // Initialize Meta Pixel if configured for this menu
   try{ if(data.metaPixel) initMetaPixel(data.metaPixel) }catch(e){ console.warn('Meta Pixel init failed', e) }
   try{
