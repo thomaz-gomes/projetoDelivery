@@ -109,8 +109,11 @@ echo -e "${YELLOW}[3/7] Atualizando configuração do Caddy...${NC}"
 
 # Recarregar Caddy se o Caddyfile mudou
 if command -v caddy &> /dev/null && [ -n "$API_DOMAIN" ] && [ -n "$APP_DOMAIN" ]; then
+    # ROOT_DOMAIN opcional — deriva do APP_DOMAIN removendo o 1º subdomínio
+    ROOT_DOMAIN="${ROOT_DOMAIN:-${APP_DOMAIN#*.}}"
     sed -e "s/API_DOMAIN_PLACEHOLDER/${API_DOMAIN}/g" \
         -e "s/APP_DOMAIN_PLACEHOLDER/${APP_DOMAIN}/g" \
+        -e "s/ROOT_DOMAIN_PLACEHOLDER/${ROOT_DOMAIN}/g" \
         -e "s/SSL_EMAIL_PLACEHOLDER/${SSL_EMAIL:-}/g" \
         "$DEPLOY_DIR/caddy/Caddyfile" > /etc/caddy/Caddyfile
     caddy validate --config /etc/caddy/Caddyfile && \
