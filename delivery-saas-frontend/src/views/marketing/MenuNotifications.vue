@@ -17,8 +17,61 @@
     </div>
 
     <template v-else-if="menuId">
-      <!-- popup card (T8 will replace with real markup) -->
-      <PopupSection v-model="form" />
+      <!-- popup card -->
+      <div class="card mb-3">
+        <div class="card-body">
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="popupOn" v-model="form.popupEnabled" />
+            <label class="form-check-label" for="popupOn"><strong>Modal de aviso (1x/dia)</strong></label>
+          </div>
+
+          <div v-if="form.popupEnabled" class="row">
+            <div class="col-lg-7">
+              <div class="mb-3">
+                <TextInput label="Título (opcional)" v-model="form.popupTitle" :maxlength="100" />
+              </div>
+              <div class="mb-3">
+                <label class="form-label"><strong>Mensagem</strong></label>
+                <textarea class="form-control" rows="4" maxlength="500" v-model="form.popupMessage"></textarea>
+                <small class="text-muted">{{ (form.popupMessage || '').length }}/500</small>
+              </div>
+              <div class="mb-3">
+                <TextInput label="Texto do botão" v-model="form.popupButtonText" :maxlength="100" placeholder="Entendi" />
+              </div>
+              <div class="mb-3">
+                <TextInput label="Link CTA (opcional)" v-model="form.popupCtaUrl" placeholder="https://..." />
+              </div>
+              <div class="mb-3">
+                <TextInput label="Label do CTA" v-model="form.popupCtaLabel" :maxlength="100" placeholder="Saiba mais" />
+              </div>
+              <div class="mb-3">
+                <label class="form-label d-block"><strong>Imagem (opcional)</strong></label>
+                <div v-if="form.popupImageUrl" class="mb-2">
+                  <img :src="assetUrl(form.popupImageUrl)" class="img-thumbnail" style="max-width:200px" />
+                  <button class="btn btn-sm btn-outline-danger ms-2" :disabled="uploading" @click="removeImage">Remover</button>
+                </div>
+                <input type="file" class="form-control" accept="image/png,image/jpeg,image/webp" :disabled="uploading" @change="uploadImage" />
+                <small v-if="uploading" class="text-muted">Enviando...</small>
+              </div>
+            </div>
+
+            <div class="col-lg-5">
+              <div class="text-muted small mb-1">Preview</div>
+              <div class="border rounded p-3" style="max-width:340px">
+                <img v-if="form.popupImageUrl" :src="assetUrl(form.popupImageUrl)" class="img-fluid mb-2" />
+                <h5 v-if="form.popupTitle">{{ form.popupTitle }}</h5>
+                <p class="mb-2" style="white-space:pre-wrap">{{ form.popupMessage }}</p>
+                <div class="d-flex gap-2">
+                  <button type="button" class="btn btn-primary btn-sm">{{ form.popupButtonText || 'Entendi' }}</button>
+                  <a v-if="form.popupCtaUrl && form.popupCtaLabel" class="btn btn-outline-secondary btn-sm">
+                    {{ form.popupCtaLabel }}
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       <!-- banner card (T9 will replace with real markup) -->
       <BannerSection v-model="form" />
 
@@ -37,12 +90,10 @@ import { ref, onMounted } from 'vue'
 import Swal from 'sweetalert2'
 import api from '../../api'
 import SelectInput from '../../components/form/select/SelectInput.vue'
+import TextInput from '../../components/form/input/TextInput.vue'
+import { assetUrl } from '../../utils/assetUrl.js'
 
-// Sections are added in later tasks (T8/T9) — for this step, render placeholder divs.
-// Kept inline (not extracted) per plan.
-const PopupSection = {
-  template: '<div class="card mb-3"><div class="card-body">popup-here</div></div>',
-}
+// Banner section is added in T9 — for this step, render placeholder div.
 const BannerSection = {
   template: '<div class="card mb-3"><div class="card-body">banner-here</div></div>',
 }
@@ -52,6 +103,7 @@ const menuId = ref('')
 const form = ref(defaults())
 const loading = ref(false)
 const saving = ref(false)
+const uploading = ref(false)
 
 function defaults() {
   return {
@@ -118,6 +170,40 @@ async function save() {
     })
   } finally {
     saving.value = false
+  }
+}
+
+async function uploadImage(e) {
+  const file = e.target.files?.[0]
+  if (!file || !menuId.value) return
+  uploading.value = true
+  try {
+    const fd = new FormData()
+    fd.append('file', file)
+    const { data } = await api.post(`/menu-announcements/${menuId.value}/image`, fd)
+    form.value.popupImageUrl = data?.url || null
+  } catch (err) {
+    Swal.fire({
+      icon: 'error',
+      text: err?.response?.data?.error || 'Falha no upload',
+    })
+  } finally {
+    uploading.value = false
+    // reset input so re-selecting the same file fires @change
+    try { e.target.value = '' } catch (_) {}
+  }
+}
+
+async function removeImage() {
+  if (!menuId.value) return
+  try {
+    await api.delete(`/menu-announcements/${menuId.value}/image`)
+    form.value.popupImageUrl = null
+  } catch (err) {
+    Swal.fire({
+      icon: 'error',
+      text: err?.response?.data?.error || 'Falha ao remover imagem',
+    })
   }
 }
 </script>
