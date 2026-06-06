@@ -4,15 +4,20 @@
     <!-- Header -->
     <div class="studio-ia-hero">
       <div class="studio-ia-hero-content">
-        <div class="d-flex align-items-center justify-content-between gap-3 mb-2">
+        <div class="d-flex align-items-center justify-content-between gap-3 mb-2 flex-wrap">
           <div>
             <h4 class="mb-0 fw-bold text-white">Studio IA</h4>
             <small class="text-white-50">Crie e aprimore fotos profissionais com inteligência artificial</small>
           </div>
-          <span class="badge bg-warning text-dark px-3 py-2">
-            <i class="bi bi-lightning-charge-fill me-1"></i>
-            Saldo: <strong>{{ balance ?? '...' }}</strong> creditos
-          </span>
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <RouterLink to="/marketing/brand-themes" class="btn btn-sm btn-light fw-semibold">
+              <i class="bi bi-palette me-1"></i>Temas Visuais
+            </RouterLink>
+            <span class="badge bg-warning text-dark px-3 py-2">
+              <i class="bi bi-lightning-charge-fill me-1"></i>
+              Saldo: <strong>{{ balance ?? '...' }}</strong> creditos
+            </span>
+          </div>
         </div>
       </div>
     </div>

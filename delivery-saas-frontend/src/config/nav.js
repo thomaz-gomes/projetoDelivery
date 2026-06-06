@@ -37,15 +37,12 @@ export const nav = [
   { name: 'Marketing', to: '/marketing', icon: 'bi bi-megaphone', role: 'ADMIN', children: [
     { name: 'Campanhas', to: '/marketing/campaigns', icon: 'bi bi-broadcast', moduleKey: 'marketing_campaigns', lockable: true },
     { name: 'Avisos no Cardápio', to: '/marketing/menu-notifications', icon: 'bi bi-megaphone' },
-    { name: 'Segmentos', to: '/marketing/segments', icon: 'bi bi-people', moduleKey: 'marketing_campaigns', lockable: true },
     { name: 'Studio IA', to: '/marketing/studio-ia', icon: 'bi bi-stars' },
-    { name: 'Temas Visuais', to: '/marketing/brand-themes', icon: 'bi bi-palette' },
     { name: 'Afiliados', to: '/affiliates', icon: 'bi bi-people-fill', moduleKey: 'affiliates', lockable: true },
     { name: 'Cupons', to: '/coupons', icon: 'bi bi-ticket-perforated', moduleKey: 'coupons', lockable: true },
     { name: 'Cashback', to: '/settings/cashback', icon: 'bi bi-cash-stack', moduleKey: 'cashback', lockable: true },
-    { name: 'Meta Pixel', to: '/settings/meta-pixel', icon: 'bi bi-bullseye', moduleKey: 'cardapio_completo', lockable: true },
   ] },
-  { name: 'Ingredientes', to: '/ingredient-groups', icon: 'bi bi-box', moduleKey: 'stock', lockable: true, role: 'ADMIN', children: [
+  { name: 'Ingredientes e Estoque', to: '/ingredient-groups', icon: 'bi bi-box', moduleKey: 'stock', lockable: true, role: 'ADMIN', children: [
     { name: 'Grupos de Ingredientes', to: '/ingredient-groups', icon: 'bi bi-list' },
     { name: 'Ingredientes', to: '/ingredients', icon: 'bi bi-basket' },
     { name: 'Fichas Técnicas', to: '/technical-sheets', icon: 'bi bi-file-earmark-text' },
