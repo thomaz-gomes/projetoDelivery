@@ -14,9 +14,10 @@ APP_DOMAIN_PLACEHOLDER {
     reverse_proxy localhost:8080
 }
 
-# Apex (raiz) e www → redireciona para o painel
+# Apex (raiz) e www → serve a landing page da SPA
 ROOT_DOMAIN_PLACEHOLDER, www.ROOT_DOMAIN_PLACEHOLDER {
-    redir https://APP_DOMAIN_PLACEHOLDER{uri} 301
+    encode zstd gzip
+    reverse_proxy localhost:8080
 }
 
 # Domínio principal da API
