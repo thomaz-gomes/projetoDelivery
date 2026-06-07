@@ -34,6 +34,78 @@ function detectMessageType(mime) {
   return 'DOCUMENT';
 }
 
+// Resolve the Meta WA account a conversation should send through. Self-heals
+// conversations that were created during an earlier bug window where
+// providerAccountId or menuId weren't populated correctly.
+//
+// Resolution order:
+//   1) conversation.providerAccountId → findUnique (happy path)
+//   2) conversation.menuId → menu.metaWaAccountId → findUnique
+//   3) single ACTIVE META_WA account for the company (unambiguous fallback)
+//
+// On success, writes back providerAccountId (and menuId when resolved via #3
+// with the single account's primary menu) so future sends skip the recovery
+// path. Returns { account } or { account: null, ambiguous: bool }.
+async function resolveMetaWaAccountForConversation(conversation, companyId) {
+  // Happy path: providerAccountId is set and the account still exists.
+  if (conversation.providerAccountId) {
+    const acc = await prisma.metaMessagingAccount.findUnique({
+      where: { id: conversation.providerAccountId },
+    });
+    if (acc && acc.companyId === companyId) return { account: acc };
+  }
+
+  // Fallback A: derive via menu.metaWaAccountId.
+  if (conversation.menuId) {
+    const menu = await prisma.menu.findUnique({
+      where: { id: conversation.menuId },
+      select: { metaWaAccountId: true },
+    });
+    if (menu?.metaWaAccountId) {
+      const acc = await prisma.metaMessagingAccount.findFirst({
+        where: { id: menu.metaWaAccountId, companyId, status: 'ACTIVE' },
+      });
+      if (acc) {
+        await prisma.conversation.update({
+          where: { id: conversation.id },
+          data: { providerAccountId: acc.id },
+        });
+        console.log('[inbox] self-healed conversation.providerAccountId via menu', {
+          conversationId: conversation.id,
+          accountId: acc.id,
+        });
+        return { account: acc };
+      }
+    }
+  }
+
+  // Fallback B: company has a single ACTIVE META_WA account — use it.
+  const candidates = await prisma.metaMessagingAccount.findMany({
+    where: { companyId, provider: 'META_WA', status: 'ACTIVE' },
+    select: { id: true },
+  });
+  if (candidates.length === 1) {
+    const acc = await prisma.metaMessagingAccount.findUnique({
+      where: { id: candidates[0].id },
+    });
+    if (acc) {
+      await prisma.conversation.update({
+        where: { id: conversation.id },
+        data: { providerAccountId: acc.id },
+      });
+      console.log('[inbox] self-healed conversation.providerAccountId via single-company-account', {
+        conversationId: conversation.id,
+        accountId: acc.id,
+      });
+      return { account: acc };
+    }
+  }
+  if (candidates.length > 1) {
+    return { account: null, ambiguous: true };
+  }
+  return { account: null, ambiguous: false };
+}
+
 // Save an uploaded file into public/uploads/quick-replies/{companyId}/{yyyy-mm}/
 // Returns { mediaUrl, mediaMimeType, mediaFileName } or null if no file.
 function saveQuickReplyMedia(file, companyId) {
@@ -225,41 +297,12 @@ router.post('/conversations/:id/send', upload.single('media'), async (req, res) 
     // Different from Evolution: no instanceName; resolves via providerAccountId.
     // Media is sent by URL (Meta fetches the file from our public uploads dir).
     if (conversation.provider === 'META_WA') {
-      if (!conversation.providerAccountId) {
-        return res.status(400).json({ message: 'Conversa Meta sem account associada' });
-      }
-      let metaAccount = await prisma.metaMessagingAccount.findUnique({
-        where: { id: conversation.providerAccountId },
-      });
-      // Self-heal: conta antiga deletada (cenário comum de
-      // disconnect + reconnect — gera row nova com ID diferente). Tenta
-      // recuperar via menu.metaWaAccountId que reflete o vínculo atual.
-      if (!metaAccount && conversation.menuId) {
-        const menu = await prisma.menu.findUnique({
-          where: { id: conversation.menuId },
-          select: { metaWaAccountId: true },
-        });
-        if (menu?.metaWaAccountId) {
-          const candidate = await prisma.metaMessagingAccount.findFirst({
-            where: { id: menu.metaWaAccountId, companyId },
-          });
-          if (candidate) {
-            await prisma.conversation.update({
-              where: { id: conversation.id },
-              data: { providerAccountId: candidate.id },
-            });
-            metaAccount = candidate;
-            console.log('[inbox] self-healed conversation.providerAccountId', {
-              conversationId: conversation.id,
-              oldAccountId: conversation.providerAccountId,
-              newAccountId: candidate.id,
-            });
-          }
-        }
-      }
+      const { account: metaAccount, ambiguous } = await resolveMetaWaAccountForConversation(conversation, companyId);
       if (!metaAccount) {
         return res.status(400).json({
-          message: 'A conta Meta desta conversa foi removida e não há vínculo automático para reatribuir. Reconecte a conta em Integrações e vincule-a ao cardápio desta conversa.',
+          message: ambiguous
+            ? 'Múltiplas contas Meta WhatsApp ativas — vincule esta conversa a um cardápio para escolher qual conta usar.'
+            : 'Nenhuma conta Meta WhatsApp ativa para esta empresa. Conecte uma conta em Integrações e vincule-a ao cardápio desta conversa.',
         });
       }
 
@@ -605,41 +648,12 @@ router.post('/conversations/:id/send-quick-reply', async (req, res) => {
 
     // ─── Meta WhatsApp Cloud branch (early return) ────────────────────────
     if (conversation.provider === 'META_WA') {
-      if (!conversation.providerAccountId) {
-        return res.status(400).json({ message: 'Conversa Meta sem account associada' });
-      }
-      let metaAccount = await prisma.metaMessagingAccount.findUnique({
-        where: { id: conversation.providerAccountId },
-      });
-      // Self-heal: conta antiga deletada (cenário comum de
-      // disconnect + reconnect — gera row nova com ID diferente). Tenta
-      // recuperar via menu.metaWaAccountId que reflete o vínculo atual.
-      if (!metaAccount && conversation.menuId) {
-        const menu = await prisma.menu.findUnique({
-          where: { id: conversation.menuId },
-          select: { metaWaAccountId: true },
-        });
-        if (menu?.metaWaAccountId) {
-          const candidate = await prisma.metaMessagingAccount.findFirst({
-            where: { id: menu.metaWaAccountId, companyId },
-          });
-          if (candidate) {
-            await prisma.conversation.update({
-              where: { id: conversation.id },
-              data: { providerAccountId: candidate.id },
-            });
-            metaAccount = candidate;
-            console.log('[inbox] self-healed conversation.providerAccountId', {
-              conversationId: conversation.id,
-              oldAccountId: conversation.providerAccountId,
-              newAccountId: candidate.id,
-            });
-          }
-        }
-      }
+      const { account: metaAccount, ambiguous } = await resolveMetaWaAccountForConversation(conversation, companyId);
       if (!metaAccount) {
         return res.status(400).json({
-          message: 'A conta Meta desta conversa foi removida e não há vínculo automático para reatribuir. Reconecte a conta em Integrações e vincule-a ao cardápio desta conversa.',
+          message: ambiguous
+            ? 'Múltiplas contas Meta WhatsApp ativas — vincule esta conversa a um cardápio para escolher qual conta usar.'
+            : 'Nenhuma conta Meta WhatsApp ativa para esta empresa. Conecte uma conta em Integrações e vincule-a ao cardápio desta conversa.',
         });
       }
 
