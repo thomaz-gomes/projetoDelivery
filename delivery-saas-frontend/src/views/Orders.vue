@@ -3828,7 +3828,19 @@ function pulseButton() {
           <div class="d-flex align-items-center gap-3">
             <div class="od-order-badge">#{{ selectedNormalized ? (selectedNormalized.display || selectedOrder?.displaySimple || selectedOrder?.id?.slice?.(0,6)) : '' }}</div>
             <div>
-              <div class="od-customer-name">{{ selectedNormalized ? selectedNormalized.customerName : (selectedOrder && (selectedOrder.customerName || selectedOrder.name)) || '—' }}</div>
+              <div class="od-customer-name d-flex align-items-center gap-2">
+                <span>{{ selectedNormalized ? selectedNormalized.customerName : (selectedOrder && (selectedOrder.customerName || selectedOrder.name)) || '—' }}</span>
+                <router-link
+                  v-if="selectedOrder?.customerId || selectedOrder?.customer?.id"
+                  :to="`/customers/${selectedOrder.customerId || selectedOrder.customer.id}`"
+                  class="btn btn-sm btn-outline-secondary py-0 px-2"
+                  title="Abrir perfil do cliente"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  <i class="bi bi-person-lines-fill"></i>
+                </router-link>
+              </div>
               <div class="od-customer-phone">{{ selectedNormalized ? (selectedNormalized.customerPhone || '') : (selectedOrder && (selectedOrder.customerPhone || selectedOrder.contact)) || '' }}
                 <span v-if="selectedNormalized?.phoneLocalizer" class="ms-2 badge bg-light text-dark border" title="Localizador de chamada iFood">Localizador {{ selectedNormalized.phoneLocalizer }}</span>
               </div>
