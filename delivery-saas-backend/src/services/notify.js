@@ -150,6 +150,10 @@ export async function persistOutboundWhatsappMessage({
   const normalized = String(phone).startsWith('55') ? String(phone) : normalizePhone(phone);
   if (!normalized) return null;
   const variants = buildPhoneVariants(normalized);
+  console.log('[notify.persistOutbound] lookup', {
+    companyId, provider, providerAccountId, menuId,
+    rawPhone: phone, normalized, variants,
+  });
 
   try {
     // 1ª tentativa: match exato pela (companyId, channel, channelContactId,
@@ -188,10 +192,44 @@ export async function persistOutboundWhatsappMessage({
             instanceName: instanceName || candidate.instanceName,
           },
         });
-        console.log('[notify] re-linked existing conversation to new providerAccountId', {
+        console.log('[notify] re-linked existing conversation to new providerAccountId via menuId', {
           conversationId: conversation.id,
           oldAccountId: candidate.providerAccountId,
           newAccountId: providerAccountId,
+        });
+      }
+    }
+
+    // 3ª tentativa (último recurso antes de criar): a unique constraint do
+    // schema é (companyId, channel, channelContactId) — só pode existir UMA
+    // conversa para essa combinação. Se houver, é a que o cliente iniciou
+    // (inbound) e devemos anexar a notificação a ela em vez de criar uma
+    // conversa "fantasma" sem histórico inbound (que dispara o banner
+    // "Aguardando primeira mensagem do cliente" e bloqueia free-text).
+    if (!conversation) {
+      const candidate = await prisma.conversation.findFirst({
+        where: {
+          companyId,
+          channel: 'WHATSAPP',
+          channelContactId: { in: variants },
+        },
+        orderBy: { lastMessageAt: 'desc' },
+      });
+      if (candidate) {
+        conversation = await prisma.conversation.update({
+          where: { id: candidate.id },
+          data: {
+            providerAccountId: providerAccountId || candidate.providerAccountId,
+            provider: provider || candidate.provider,
+            instanceName: instanceName || candidate.instanceName,
+            menuId: menuId || candidate.menuId,
+            storeId: storeId || candidate.storeId,
+            customerId: customerId || candidate.customerId,
+          },
+        });
+        console.log('[notify] attached outbound to existing inbound conversation', {
+          conversationId: conversation.id,
+          channelContactId: conversation.channelContactId,
         });
       }
     }
@@ -217,13 +255,13 @@ export async function persistOutboundWhatsappMessage({
         });
       } catch (e) {
         if (e?.code === 'P2002') {
-          // Race: another concurrent notify created the conversation; re-fetch.
+          // Race: another concurrent notify created the conversation; re-fetch
+          // by the natural unique key, no providerAccountId filter.
           conversation = await prisma.conversation.findFirst({
             where: {
               companyId,
               channel: 'WHATSAPP',
               channelContactId: { in: variants },
-              providerAccountId,
             },
           });
         } else {
@@ -719,10 +757,15 @@ export async function notifyCustomerStatus(orderId, newStatus) {
       return;
     }
 
-    const phone = normalizePhone(
-      order.customerPhone ||
-      order?.payload?.customer?.phone?.number || ''
-    );
+    const rawCustomerPhone = order.customerPhone || null;
+    const rawPayloadPhone = order?.payload?.customer?.phone?.number || null;
+    const phone = normalizePhone(rawCustomerPhone || rawPayloadPhone || '');
+    console.log('[notifyCustomerStatus] phone resolution', {
+      orderId: order.id,
+      rawCustomerPhone,
+      rawPayloadPhone,
+      normalized: phone,
+    });
     if (!phone) return;
     if (isBrServiceNumber(phone)) {
       console.log('[notifyCustomerStatus] skipping non-WhatsApp service number', phone);
