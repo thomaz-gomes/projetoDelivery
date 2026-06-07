@@ -537,13 +537,16 @@ export async function notifyRiderAssigned(orderId, { overridePhone } = {}) {
   try {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: { rider: true, company: true, customer: true, menu: { select: { name: true } }, store: { select: { name: true } } },
+      include: { rider: true, company: true, customer: true, menu: { select: { name: true, metaWaAccountId: true } }, store: { select: { name: true } } },
     });
     if (!order) return;
 
-    // Respect company-level evolution toggle: if disabled, do not send notifications
-    if (!order.company || !order.company.evolutionEnabled) {
-      console.log('[notifyRiderAssigned] Evolution notifications disabled for company', order.companyId);
+    // Respect company-level notification toggle: only skip when neither
+    // Evolution nor a Meta WA channel is available for this order's menu.
+    const hasEvo = order.company?.evolutionEnabled === true;
+    const hasMetaWa = !!order.menu?.metaWaAccountId;
+    if (!order.company || (!hasEvo && !hasMetaWa)) {
+      console.log('[notifyRiderAssigned] no WhatsApp channel configured', order.companyId, order.menuId);
       return;
     }
 
@@ -699,12 +702,15 @@ export async function notifyRiderAssigned(orderId, { overridePhone } = {}) {
 
 export async function notifyCustomerStatus(orderId, newStatus) {
   try {
-    const order = await prisma.order.findUnique({ where: { id: orderId }, include: { company: true, store: true, menu: { select: { name: true } } } });
+    const order = await prisma.order.findUnique({ where: { id: orderId }, include: { company: true, store: true, menu: { select: { name: true, metaWaAccountId: true } } } });
     if (!order) return;
 
-    // Respect company-level evolution toggle: if disabled, do not send notifications
-    if (!order.company || !order.company.evolutionEnabled) {
-      console.log('[notifyCustomerStatus] Evolution notifications disabled for company', order.companyId);
+    // Respect company-level notification toggle: only skip when neither
+    // Evolution nor a Meta WA channel is available for this order's menu.
+    const hasEvo = order.company?.evolutionEnabled === true;
+    const hasMetaWa = !!order.menu?.metaWaAccountId;
+    if (!order.company || (!hasEvo && !hasMetaWa)) {
+      console.log('[notifyCustomerStatus] no WhatsApp channel configured', order.companyId, order.menuId);
       return;
     }
 
@@ -824,12 +830,15 @@ export async function notifyCustomerOrderSummary(orderId) {
   // to send order summaries when a WhatsApp instance is available and the
   // order includes a customer phone number.
   try {
-    const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true, company: true, store: true, menu: { select: { name: true } } } });
+    const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true, company: true, store: true, menu: { select: { name: true, metaWaAccountId: true } } } });
     if (!order) return;
 
-    // Respect company-level evolution toggle: if disabled, do not send notifications
-    if (!order.company || !order.company.evolutionEnabled) {
-      console.log('[notifyCustomerOrderSummary] Evolution notifications disabled for company', order.companyId);
+    // Respect company-level notification toggle: only skip when neither
+    // Evolution nor a Meta WA channel is available for this order's menu.
+    const hasEvo = order.company?.evolutionEnabled === true;
+    const hasMetaWa = !!order.menu?.metaWaAccountId;
+    if (!order.company || (!hasEvo && !hasMetaWa)) {
+      console.log('[notifyCustomerOrderSummary] no WhatsApp channel configured', order.companyId, order.menuId);
       return;
     }
 
@@ -956,7 +965,14 @@ export async function notifyCashbackCredit(clientId, companyId, amount, newBalan
       prisma.customer.findUnique({ where: { id: clientId }, select: { fullName: true, whatsapp: true } }),
       prisma.company.findUnique({ where: { id: companyId }, select: { name: true, evolutionEnabled: true, orderNotifyTemplates: true, orderNotifyDisabled: true } }),
     ]);
-    if (!company?.evolutionEnabled) return;
+    // Allow notification if Evolution toggle is on OR the company has any
+    // active Meta WA channel configured (Cloud API).
+    if (!company?.evolutionEnabled) {
+      const metaWaCount = await prisma.metaMessagingAccount.count({
+        where: { companyId, provider: 'META_WA', status: 'ACTIVE' },
+      });
+      if (metaWaCount === 0) return;
+    }
     if (isNotifyDisabled(company, 'CASHBACK_CREDIT')) {
       console.log('[notifyCashbackCredit] notification disabled');
       return;
