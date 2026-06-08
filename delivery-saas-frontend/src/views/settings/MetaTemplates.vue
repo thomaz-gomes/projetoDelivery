@@ -108,6 +108,55 @@ async function syncTemplates() {
   }
 }
 
+// ─── Gerar templates padrão ────────────────────────────────────────────────
+// Submete em lote os 8 templates do sistema (ORDER_SUMMARY, EM_PREPARO,
+// SAIU_PARA_ENTREGA, CONCLUIDO, CANCELADO, CONFIRMACAO_PAGAMENTO,
+// RIDER_ASSIGNED, CASHBACK_CREDIT) já formatados com as variáveis na ordem
+// que o notify.js espera, e cria os NotificationTemplateMapping automatica-
+// mente. Idempotente: re-rodar não duplica.
+const seeding = ref(false)
+async function seedDefaults() {
+  if (!selectedAccountId.value) {
+    await Swal.fire({ icon: 'warning', title: 'Selecione um número', text: 'Escolha qual número WhatsApp.' })
+    return
+  }
+  const confirm = await Swal.fire({
+    icon: 'question',
+    title: 'Gerar templates padrão?',
+    html: `Vai submeter na Meta os <strong>8 templates do sistema</strong> (status de pedido, cashback, etc.) já alinhados com as notificações automáticas.<br><br>Templates já existentes são ignorados — é seguro rodar várias vezes.`,
+    showCancelButton: true,
+    confirmButtonText: 'Gerar agora',
+    cancelButtonText: 'Cancelar',
+  })
+  if (!confirm.isConfirmed) return
+  seeding.value = true
+  try {
+    const resp = await api.post('/meta/templates/seed-defaults', { accountId: selectedAccountId.value })
+    const { submitted = 0, skipped = 0, failed = 0, results = [] } = resp.data || {}
+    const errorList = results.filter(r => r.error)
+    const summaryHtml = `
+      <div class="text-start">
+        <p><strong>${submitted}</strong> submetidos · <strong>${skipped}</strong> já existiam · <strong>${failed}</strong> falharam</p>
+        ${errorList.length ? `<hr><div class="small text-danger">${errorList.map(r => `<div><strong>${r.notificationType}:</strong> ${r.error}</div>`).join('')}</div>` : ''}
+        ${submitted > 0 ? `<hr><div class="small text-muted">Templates submetidos ficam em <strong>PENDING</strong>. A Meta costuma aprovar UTILITY em minutos — quando ficarem APPROVED, o sistema passa a usá-los automaticamente fora da janela 24h.</div>` : ''}
+      </div>
+    `
+    await Swal.fire({
+      icon: failed > 0 ? 'warning' : 'success',
+      title: failed > 0 ? 'Concluído com avisos' : 'Templates gerados',
+      html: summaryHtml,
+    })
+    await load()
+    await loadMappings()
+  } catch (err) {
+    console.error('[MetaTemplates] seed-defaults failed:', err)
+    const msg = err?.response?.data?.message || err.message
+    await Swal.fire({ icon: 'error', title: 'Falha ao gerar templates', text: msg })
+  } finally {
+    seeding.value = false
+  }
+}
+
 // ─── Mapeamento de notificações → templates ────────────────────────────────
 //
 // Cada tipo de notificação transacional (status de pedido, cashback, etc.)
@@ -211,6 +260,9 @@ onMounted(async () => {
     <div class="d-flex align-items-center justify-content-between mb-3">
       <h2 class="mb-0">Templates WhatsApp</h2>
       <div class="d-flex gap-2">
+        <BaseButton variant="outline" @click="seedDefaults" :loading="seeding" :disabled="loading || !selectedAccountId" title="Submete na Meta os templates padrão do sistema (status de pedido, cashback, etc.)">
+          <i class="bi bi-magic me-1"></i> Gerar padrão
+        </BaseButton>
         <BaseButton variant="outline" @click="syncTemplates" :loading="syncing" :disabled="loading || !selectedAccountId">
           <i class="bi bi-arrow-repeat me-1"></i> Sincronizar
         </BaseButton>

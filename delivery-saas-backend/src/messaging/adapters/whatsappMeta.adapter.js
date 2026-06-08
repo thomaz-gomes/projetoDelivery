@@ -325,9 +325,16 @@ const adapter = {
     const token = safeDecrypt(account.accessToken)
     const { graphVersion } = await getMetaConfig()
     const url = `https://graph.facebook.com/${graphVersion}/${encodeURIComponent(account.wabaId)}/message_templates`
+
+    // Meta exige `example` quando há variáveis {{N}} em BODY/HEADER. Sem isso
+    // a submissão é rejeitada de imediato com "Example values required" ou
+    // "Parameter format does not match". Normalizamos aqui para que callers
+    // que não setam example (UI simples, builders programáticos) funcionem.
+    const normalizedComponents = components.map(c => normalizeTemplateComponent(c))
+
     const { data } = await axios.post(
       url,
-      { name, language, category, components },
+      { name, language, category, components: normalizedComponents },
       {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         timeout: 30000,
@@ -683,6 +690,61 @@ function throwMappedError(err, ctx) {
   wrapped.metaCode = code || null
   wrapped.metaError = errorObj || null
   throw wrapped
+}
+
+// ─── Template normalization ────────────────────────────────────────────────
+// Meta exige `example.body_text` (BODY) e `example.header_text` (HEADER TEXT)
+// quando o componente usa variáveis {{N}}. Sem isso a Meta rejeita logo na
+// submissão. Esta função auto-gera exemplos genéricos quando o caller não
+// passou — preserva qualquer example já fornecido.
+
+const EXAMPLE_PLACEHOLDERS = ['Maria', '#123', 'Sua Loja', 'R$ 50,00', '12:30', 'CEP 40000-000', 'Centro']
+
+function extractVarPositions(text) {
+  const matches = String(text || '').match(/\{\{\s*(\d+)\s*\}\}/g) || []
+  const positions = matches
+    .map(m => parseInt(m.replace(/\D/g, ''), 10))
+    .filter(n => Number.isFinite(n) && n > 0)
+  if (positions.length === 0) return []
+  const max = Math.max(...positions)
+  return Array.from({ length: max }, (_, i) => i + 1)
+}
+
+function buildExampleValues(positions) {
+  return positions.map((_, i) => EXAMPLE_PLACEHOLDERS[i] || `Exemplo${i + 1}`)
+}
+
+function normalizeTemplateComponent(component) {
+  if (!component || typeof component !== 'object') return component
+  const type = String(component.type || '').toUpperCase()
+
+  if (type === 'BODY' && component.text) {
+    const positions = extractVarPositions(component.text)
+    if (positions.length === 0) return component
+    if (component.example?.body_text) return component
+    return {
+      ...component,
+      example: {
+        ...(component.example || {}),
+        body_text: [buildExampleValues(positions)],
+      },
+    }
+  }
+
+  if (type === 'HEADER' && String(component.format || '').toUpperCase() === 'TEXT' && component.text) {
+    const positions = extractVarPositions(component.text)
+    if (positions.length === 0) return component
+    if (component.example?.header_text) return component
+    return {
+      ...component,
+      example: {
+        ...(component.example || {}),
+        header_text: buildExampleValues(positions),
+      },
+    }
+  }
+
+  return component
 }
 
 // ─── Media storage helpers ─────────────────────────────────────────────────

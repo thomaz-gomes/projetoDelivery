@@ -9,6 +9,12 @@ import { Router } from 'express';
 import { prisma } from '../prisma.js';
 import { authMiddleware, requireRole } from '../auth.js';
 import whatsappMetaAdapter from '../messaging/adapters/whatsappMeta.adapter.js';
+import {
+  DEFAULT_TEMPLATES,
+  DEFAULT_TEMPLATE_LANGUAGE,
+  DEFAULT_TEMPLATE_CATEGORY,
+  buildComponentsForTemplate,
+} from '../messaging/templates/defaultsCatalog.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -127,6 +133,132 @@ router.post('/templates/sync', requireRole('ADMIN'), async (req, res) => {
   } catch (err) {
     console.error('[meta/templates/sync]', err);
     return res.status(500).json({ message: 'Erro ao sincronizar templates', error: err.message });
+  }
+});
+
+// POST /meta/templates
+// POST /meta/templates/seed-defaults
+// body: { accountId }
+//
+// Submete os templates padrão do sistema (DEFAULT_TEMPLATES) na Meta de uma
+// vez só. Idempotente: skipa silenciosamente templates já existentes (por
+// name + language + account). Auto-cria os NotificationTemplateMapping pra
+// que assim que a Meta aprovar (status APPROVED), o sistema já comece a usar
+// como fallback fora da janela 24h sem mais nenhuma config.
+router.post('/templates/seed-defaults', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const { companyId } = req.user;
+    const userId = req.user.id || req.user.userId || null;
+    const { accountId } = req.body || {};
+    if (!accountId) return res.status(400).json({ message: 'accountId é obrigatório' });
+
+    const account = await prisma.metaMessagingAccount.findFirst({
+      where: { id: accountId, companyId, provider: 'META_WA' },
+    });
+    if (!account) return res.status(404).json({ message: 'Conta Meta WA não encontrada' });
+    if (!account.wabaId) {
+      return res.status(400).json({ message: 'Conta sem wabaId — necessário pra criar templates' });
+    }
+
+    const results = [];
+    for (const entry of DEFAULT_TEMPLATES) {
+      const item = {
+        notificationType: entry.notificationType,
+        name: entry.name,
+        status: null,
+        externalId: null,
+        skipped: false,
+        error: null,
+      };
+
+      // Idempotência: se já existe local (account + name + language), reusa.
+      let row = await prisma.metaTemplate.findFirst({
+        where: { metaWaAccountId: account.id, name: entry.name, language: DEFAULT_TEMPLATE_LANGUAGE },
+      });
+
+      if (!row) {
+        try {
+          const components = buildComponentsForTemplate(entry);
+          const metaResult = await whatsappMetaAdapter.createTemplate(account, {
+            name: entry.name,
+            language: DEFAULT_TEMPLATE_LANGUAGE,
+            category: DEFAULT_TEMPLATE_CATEGORY,
+            components,
+          });
+          row = await prisma.metaTemplate.create({
+            data: {
+              companyId,
+              metaWaAccountId: account.id,
+              externalId: String(metaResult.id || ''),
+              name: entry.name,
+              language: DEFAULT_TEMPLATE_LANGUAGE,
+              category: metaResult.category || DEFAULT_TEMPLATE_CATEGORY,
+              status: String(metaResult.status || 'PENDING').toUpperCase(),
+              components,
+              createdViaApp: true,
+              submittedByUserId: userId,
+              submittedAt: new Date(),
+            },
+          });
+        } catch (err) {
+          const metaErr = err?.response?.data?.error || err?.metaError || null;
+          item.error = metaErr?.message || err?.message || 'submit_failed';
+          item.metaCode = metaErr?.code || null;
+          console.error('[meta/templates seed-defaults] submit failed',
+            entry.notificationType, item.error);
+          results.push(item);
+          continue;
+        }
+      } else {
+        item.skipped = true;
+      }
+
+      item.status = row.status;
+      item.externalId = row.externalId || null;
+      item.templateId = row.id;
+
+      // Auto-mapping: cria/atualiza NotificationTemplateMapping para o tipo
+      // correspondente. trySendViaTemplate em notify.js só usa o template se
+      // status === 'APPROVED', então mapear PENDING é seguro (não dispara
+      // template prematuro). Quando o webhook de update mudar pra APPROVED,
+      // já fica ativo automaticamente.
+      try {
+        await prisma.notificationTemplateMapping.upsert({
+          where: {
+            companyId_notificationType: {
+              companyId,
+              notificationType: entry.notificationType,
+            },
+          },
+          create: {
+            companyId,
+            notificationType: entry.notificationType,
+            metaTemplateId: row.id,
+          },
+          update: {
+            metaTemplateId: row.id,
+          },
+        });
+      } catch (mapErr) {
+        console.warn('[meta/templates seed-defaults] mapping upsert failed',
+          entry.notificationType, mapErr?.message);
+      }
+
+      results.push(item);
+    }
+
+    return res.json({
+      submitted: results.filter(r => !r.skipped && !r.error).length,
+      skipped: results.filter(r => r.skipped).length,
+      failed: results.filter(r => r.error).length,
+      results,
+    });
+  } catch (err) {
+    console.error('[meta/templates seed-defaults]', err);
+    return res.status(500).json({
+      message: 'Erro ao criar templates padrão',
+      error: err.message,
+    });
   }
 });
 
