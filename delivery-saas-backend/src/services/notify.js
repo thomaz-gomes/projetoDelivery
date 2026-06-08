@@ -890,10 +890,15 @@ export async function notifyCustomerOrderSummary(orderId) {
       return;
     }
 
-    const phone = normalizePhone(
-      order.customerPhone ||
-      order?.payload?.customer?.phone?.number || ''
-    );
+    const rawCustomerPhone = order.customerPhone || null;
+    const rawPayloadPhone = order?.payload?.customer?.phone?.number || null;
+    const phone = normalizePhone(rawCustomerPhone || rawPayloadPhone || '');
+    console.log('[notifyCustomerOrderSummary] phone resolution', {
+      orderId: order.id,
+      rawCustomerPhone,
+      rawPayloadPhone,
+      normalized: phone,
+    });
     if (!phone) return;
     if (isBrServiceNumber(phone)) {
       console.log('[notifyCustomerOrderSummary] skipping non-WhatsApp service number', phone);
