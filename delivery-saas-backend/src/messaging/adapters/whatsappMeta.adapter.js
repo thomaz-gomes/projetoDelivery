@@ -262,7 +262,7 @@ const adapter = {
 
     const body = {
       messaging_product: 'whatsapp',
-      to: String(to).replace(/\D/g, ''),
+      to: ensureBrMobile9thDigit(String(to).replace(/\D/g, '')),
       type: 'template',
       template: {
         name,
@@ -566,8 +566,25 @@ function extractReorderButton(msg) {
   return { orderId }
 }
 
+// Brazilian mobile numbers require the 9th digit (a "9" inserted between DDD
+// and the 8-digit number) since 2014. WhatsApp Cloud accepts the request for
+// the old 12-digit format (55 + DDD + 8) but silently fails to deliver — the
+// recipient WhatsApp account only exists at the modern 13-digit form. Insert
+// the 9 here so we always send to a valid WA address.
+function ensureBrMobile9thDigit(digits) {
+  if (digits.length === 12 && digits.startsWith('55')) {
+    const ddd = digits.slice(2, 4)
+    const rest = digits.slice(4)
+    // Only mobile prefixes (9, 8, 7, 6) get the 9th — landlines start with 2-5.
+    if (/^[6-9]/.test(rest)) {
+      return `55${ddd}9${rest}`
+    }
+  }
+  return digits
+}
+
 function buildOutboundBody(to, content) {
-  const recipient = String(to).replace(/\D/g, '')
+  const recipient = ensureBrMobile9thDigit(String(to).replace(/\D/g, ''))
   const type = String(content?.type || 'TEXT').toUpperCase()
   // Meta exige link HTTPS público — relativo (/public/...) cai em erro
   // genérico de download. Normaliza antes de montar o body.
