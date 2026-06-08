@@ -573,8 +573,14 @@ function close(){ emit('update:visible', false); }
 const phoneDigits = computed(()=> {
   // Remove tudo que não é dígito
   const digits = phoneInput.value.replace(/\D/g,'');
-  // Remove DDI 55 se presente, pega últimos 11 dígitos
-  return digits.length > 11 ? digits.slice(-11) : digits;
+  // Remove DDI '55' quando presente. Aceita 12 dígitos (formato BR antigo
+  // 55 + DDD + 8 dígitos) e 13 dígitos (moderno 55 + DDD + 9 + 8 dígitos).
+  // Bug histórico: usar slice(-11) cortava só 1 dígito do "55" no formato
+  // de 12 dígitos, produzindo telefones malformados com "5" prefixo.
+  if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) {
+    return digits.slice(2);
+  }
+  return digits;
 });
 const fetchingFullCustomer = ref(false);
 async function searchCustomer(){
@@ -589,10 +595,14 @@ async function searchCustomer(){
     const r = await api.get(`/customers?q=${encodeURIComponent(phoneDigits.value)}`);
     const rows = r.data?.rows || [];
     console.log('Resultados da busca:', rows.length, rows);
-    // Normaliza telefones removendo não-dígitos e pegando últimos 11
+    // Normaliza telefones removendo não-dígitos e DDI '55' (suporta formato
+    // antigo de 12 dígitos e moderno de 13). Match phoneDigits computed acima.
     const normalizePhone = (p) => {
       const d = String(p||'').replace(/\D/g,'');
-      return d.length > 11 ? d.slice(-11) : d;
+      if (d.startsWith('55') && (d.length === 12 || d.length === 13)) {
+        return d.slice(2);
+      }
+      return d;
     };
     const match = rows.find(c => normalizePhone(c.whatsapp)===phoneDigits.value || normalizePhone(c.phone)===phoneDigits.value);
     console.log('Cliente encontrado:', match);
