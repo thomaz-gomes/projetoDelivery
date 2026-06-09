@@ -3207,12 +3207,14 @@ enum MarketingAttributionScope {
 
 enum MarketingMessageStatus {
   QUEUED
+  SCHEDULED
   SENDING
   SENT
   DELIVERED
   READ
   FAILED
   OPTED_OUT
+  SUPPRESSED_QUIET_HOURS
 }
 
 model MarketingSegment {

@@ -10,6 +10,7 @@ router.use(requireModuleStrict('MARKETING_CAMPAIGNS'))
 
 const VALID_SCHEDULE_TYPES = new Set(['ONE_SHOT', 'RECURRING', 'TRIGGER'])
 const VALID_CHANNELS = new Set(['META_WA', 'EVOLUTION_WA', 'AUTO'])
+const VALID_TRIGGER_TYPES = new Set(['WINDOW_NO_ORDER', 'WINDOW_WITH_ORDER'])
 const VALID_ATTRIBUTION_SCOPES = new Set(['menu', 'company'])
 
 // Fields users can edit on a DRAFT/PAUSED/SCHEDULED campaign
@@ -201,6 +202,13 @@ router.post('/', requireRole('ADMIN'), async (req, res) => {
   }
   if (!scheduleType || !VALID_SCHEDULE_TYPES.has(scheduleType)) {
     return res.status(400).json({ message: 'scheduleType inválido' })
+  }
+  if (scheduleType === 'TRIGGER') {
+    if (!triggerType || !VALID_TRIGGER_TYPES.has(triggerType)) {
+      return res.status(400).json({
+        message: `Para scheduleType=TRIGGER, triggerType é obrigatório (um de: ${[...VALID_TRIGGER_TYPES].join(', ')}).`,
+      })
+    }
   }
 
   const ch = channel || 'AUTO'

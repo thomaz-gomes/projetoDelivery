@@ -25,6 +25,15 @@ const form = ref({
   scheduledFor: '',
   conversionWindowHours: 48,
   attributionScope: 'menu',
+  // Trigger-only fields (scheduleType=TRIGGER)
+  triggerType: '',
+  triggerDelayMinutes: 30,
+  triggerMaxAgeHours: 23,
+  triggerOnlyFirstTimeCustomers: false,
+  triggerMinOrderValue: '',
+  respectQuietHours: true,
+  quietHoursStart: '23:00',
+  quietHoursEnd: '09:00',
 })
 
 const segments = ref([])
@@ -214,6 +223,21 @@ async function persistDraft() {
     mediaUrl: form.value.mediaUrl || null,
     conversionWindowHours: Number(form.value.conversionWindowHours) || 48,
     attributionScope: form.value.attributionScope,
+  }
+  // Campos de TRIGGER — só envia se scheduleType=TRIGGER
+  if (form.value.scheduleType === 'TRIGGER') {
+    payload.triggerType = form.value.triggerType || null
+    payload.triggerParams = {
+      delayMinutes: Number(form.value.triggerDelayMinutes) || 30,
+      maxAgeHours: Number(form.value.triggerMaxAgeHours) || 23,
+      respectQuietHours: !!form.value.respectQuietHours,
+      quietHoursStart: form.value.quietHoursStart || '23:00',
+      quietHoursEnd: form.value.quietHoursEnd || '09:00',
+      ...(form.value.triggerType === 'WINDOW_WITH_ORDER' ? {
+        onlyFirstTimeCustomers: !!form.value.triggerOnlyFirstTimeCustomers,
+        ...(form.value.triggerMinOrderValue ? { minOrderValue: Number(form.value.triggerMinOrderValue) } : {}),
+      } : {}),
+    }
   }
   if (!campaignId.value) {
     const { data } = await api.post('/marketing/campaigns', payload)
@@ -473,8 +497,88 @@ async function activate() {
           <label class="form-check-label text-muted">Recorrente (em breve)</label>
         </div>
         <div class="form-check">
-          <input type="radio" disabled class="form-check-input"/>
-          <label class="form-check-label text-muted">Gatilho (aniversário, etc — em breve)</label>
+          <input id="sch_trigger" v-model="form.scheduleType" type="radio" value="TRIGGER" class="form-check-input"/>
+          <label for="sch_trigger" class="form-check-label">Gatilho automático</label>
+        </div>
+
+        <div v-if="form.scheduleType === 'TRIGGER'" class="ms-4 mb-3 mt-2 p-3 border rounded bg-light">
+          <div class="alert alert-info small mb-3">
+            <i class="bi bi-info-circle me-1"></i>
+            <strong>Apenas para WhatsApp Cloud (META_WA):</strong> a campanha dispara mensagem livre
+            <em>dentro da janela de 24h</em> aberta pelo cliente. Roda automaticamente em segundo plano
+            (cron a cada minuto).
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Tipo de gatilho</label>
+            <select v-model="form.triggerType" class="form-select">
+              <option value="">Selecione...</option>
+              <option value="WINDOW_NO_ORDER">Cliente abriu janela 24h mas <strong>não pediu</strong></option>
+              <option value="WINDOW_WITH_ORDER">Cliente abriu janela 24h e <strong>fez pedido</strong></option>
+            </select>
+            <small class="form-text">
+              <span v-if="form.triggerType === 'WINDOW_NO_ORDER'">
+                Útil para engajar quem demonstrou interesse mas não converteu (oferece cupom, tira dúvida).
+              </span>
+              <span v-else-if="form.triggerType === 'WINDOW_WITH_ORDER'">
+                Útil para pós-venda dentro da janela (agradecimento, pedido de review, upsell).
+              </span>
+            </small>
+          </div>
+
+          <div v-if="form.triggerType" class="row g-2">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Esperar quantos minutos antes de enviar</label>
+              <input v-model.number="form.triggerDelayMinutes" type="number" class="form-control" min="1" max="1380" />
+              <small class="form-text">
+                Tempo desde {{ form.triggerType === 'WINDOW_NO_ORDER' ? 'a mensagem do cliente' : 'a criação do pedido' }}.
+              </small>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Janela máxima (horas)</label>
+              <input v-model.number="form.triggerMaxAgeHours" type="number" class="form-control" min="1" max="23" />
+              <small class="form-text">Não dispara após esse tempo (limite Meta: 24h).</small>
+            </div>
+          </div>
+
+          <div v-if="form.triggerType === 'WINDOW_WITH_ORDER'" class="row g-2">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Valor mínimo do pedido (R$)</label>
+              <input v-model="form.triggerMinOrderValue" type="number" class="form-control" min="0" step="0.01" placeholder="opcional" />
+            </div>
+            <div class="col-md-6 mb-3 d-flex align-items-end">
+              <div class="form-check">
+                <input id="trg_firsttime" v-model="form.triggerOnlyFirstTimeCustomers" type="checkbox" class="form-check-input" />
+                <label for="trg_firsttime" class="form-check-label">Apenas clientes de primeira viagem</label>
+              </div>
+            </div>
+          </div>
+
+          <hr/>
+
+          <div class="form-check mb-2">
+            <input id="trg_quiet" v-model="form.respectQuietHours" type="checkbox" class="form-check-input" />
+            <label for="trg_quiet" class="form-check-label">
+              <strong>Respeitar horário silencioso</strong> (não enviar em horário inconveniente)
+            </label>
+          </div>
+
+          <div v-if="form.respectQuietHours" class="row g-2 ms-3">
+            <div class="col-md-6 mb-2">
+              <label class="form-label">Não enviar a partir de</label>
+              <input v-model="form.quietHoursStart" type="time" class="form-control" />
+            </div>
+            <div class="col-md-6 mb-2">
+              <label class="form-label">Voltar a enviar a partir de</label>
+              <input v-model="form.quietHoursEnd" type="time" class="form-control" />
+            </div>
+            <div class="col-12">
+              <small class="form-text text-muted">
+                Padrão 23:00–09:00. Mensagens que cairiam nesse intervalo são <strong>agendadas</strong> para o próximo horário válido.
+                Se a janela de 24h da Meta vencer antes do horário liberar, a mensagem é <strong>descartada</strong> (registrada como SUPPRESSED_QUIET_HOURS para auditoria).
+              </small>
+            </div>
+          </div>
         </div>
 
         <hr/>
