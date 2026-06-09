@@ -8,7 +8,10 @@ import { assetUrl } from '../../utils/assetUrl.js'
 import Swal from 'sweetalert2'
 
 const router = useRouter()
-const step = ref(1)
+// step.value mapeia para o conteúdo: 1=Audiência, 2=Mensagem, 3=Quando, 4=Revisar.
+// A nova ORDEM visível ao operador (via stepOrder/visibleStepLabels) começa em
+// "Quando enviar" — então iniciamos em step=3.
+const step = ref(3)
 const form = ref({
   name: '',
   segmentId: '',
@@ -142,6 +145,38 @@ const canActivate = computed(() => {
   if (needsAudienceConfirm.value && Number(confirmCount.value) !== preflight.value.eligible) return false
   return true
 })
+
+// ── Step ordering ──
+// Nova ordem visível ao operador (Quando enviar vem primeiro). Quando o
+// scheduleType é TRIGGER, o passo "Audiência" é pulado — o público é
+// construído dinamicamente pelo trigger evaluator a partir das mensagens
+// inbound, não há segmento a definir.
+const isTrigger = computed(() => form.value.scheduleType === 'TRIGGER')
+
+// Mapa interno step.value (1-4) → ordem original do código. Reusamos
+// step.value=1 para "Quando", =2 para "Audiência", =3 para "Mensagem", =4 para "Revisar".
+const visibleStepLabels = computed(() => isTrigger.value
+  ? ['Quando enviar', 'Mensagem', 'Revisar']
+  : ['Quando enviar', 'Audiência', 'Mensagem', 'Revisar']
+)
+const stepOrder = computed(() => isTrigger.value ? [1, 3, 4] : [1, 2, 3, 4])
+const currentStepIndex = computed(() => Math.max(0, stepOrder.value.indexOf(step.value)))
+
+async function goToNextStep() {
+  const i = currentStepIndex.value
+  if (i >= stepOrder.value.length - 1) return
+  const nextStep = stepOrder.value[i + 1]
+  // Última etapa (Revisar=4) exige persist + preflight via goToReview.
+  if (nextStep === 4) {
+    await goToReview()
+    return
+  }
+  step.value = nextStep
+}
+function goToPrevStep() {
+  const i = currentStepIndex.value
+  if (i > 0) step.value = stepOrder.value[i - 1]
+}
 
 onMounted(async () => {
   try {
@@ -277,9 +312,9 @@ async function activate() {
 
     <!-- Progress -->
     <div class="d-flex mb-4 gap-2">
-      <div v-for="n in 4" :key="n" class="flex-grow-1 text-center small"
-           :class="step === n ? 'fw-bold text-primary' : 'text-muted'">
-        {{ n }}. {{ ['Audiência','Mensagem','Quando','Revisar'][n-1] }}
+      <div v-for="(label, idx) in visibleStepLabels" :key="idx" class="flex-grow-1 text-center small"
+           :class="currentStepIndex === idx ? 'fw-bold text-primary' : 'text-muted'">
+        {{ idx + 1 }}. {{ label }}
       </div>
     </div>
 
@@ -305,7 +340,7 @@ async function activate() {
           📊 {{ audienceCount }} clientes elegíveis (com opt-in)
         </div>
         <div class="d-flex justify-content-end mt-4">
-          <BaseButton variant="primary" :disabled="!form.segmentId || audienceCount === 0" @click="step = 2">Próximo →</BaseButton>
+          <BaseButton variant="primary" :disabled="!form.segmentId || audienceCount === 0" @click="goToNextStep">Próximo →</BaseButton>
         </div>
       </div>
     </div>
@@ -416,8 +451,8 @@ async function activate() {
         </div>
 
         <div class="d-flex justify-content-between mt-4">
-          <BaseButton variant="outline" @click="step = 1">← Voltar</BaseButton>
-          <BaseButton variant="primary" :disabled="!previewSeen" @click="step = 3">Próximo →</BaseButton>
+          <BaseButton variant="outline" @click="goToPrevStep">← Voltar</BaseButton>
+          <BaseButton variant="primary" :disabled="!previewSeen" @click="goToNextStep">Próximo →</BaseButton>
         </div>
           </div>
         </div>
@@ -596,8 +631,9 @@ async function activate() {
         </div>
 
         <div class="d-flex justify-content-between mt-4">
-          <BaseButton variant="outline" @click="step = 2">← Voltar</BaseButton>
-          <BaseButton variant="primary" @click="goToReview">Próximo →</BaseButton>
+          <BaseButton variant="outline" v-if="currentStepIndex > 0" @click="goToPrevStep">← Voltar</BaseButton>
+          <span v-else></span>
+          <BaseButton variant="primary" @click="goToNextStep">Próximo →</BaseButton>
         </div>
       </div>
     </div>
@@ -642,7 +678,7 @@ async function activate() {
         </div>
 
         <div class="d-flex justify-content-between mt-4">
-          <BaseButton variant="outline" @click="step = 3">← Voltar</BaseButton>
+          <BaseButton variant="outline" @click="goToPrevStep">← Voltar</BaseButton>
           <BaseButton variant="primary" :loading="activating" :disabled="!canActivate" @click="activate">
             🚀 Ativar campanha
           </BaseButton>

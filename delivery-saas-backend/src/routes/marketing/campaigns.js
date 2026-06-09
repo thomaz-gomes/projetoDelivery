@@ -197,11 +197,13 @@ router.post('/', requireRole('ADMIN'), async (req, res) => {
   if (!name || typeof name !== 'string' || !name.trim()) {
     return res.status(400).json({ message: 'Nome é obrigatório' })
   }
-  if (!segmentId) {
-    return res.status(400).json({ message: 'segmentId é obrigatório' })
-  }
   if (!scheduleType || !VALID_SCHEDULE_TYPES.has(scheduleType)) {
     return res.status(400).json({ message: 'scheduleType inválido' })
+  }
+  // segmentId obrigatório para ONE_SHOT/RECURRING; opcional para TRIGGER
+  // (público é construído dinamicamente pelo evaluator do trigger).
+  if (scheduleType !== 'TRIGGER' && !segmentId) {
+    return res.status(400).json({ message: 'segmentId é obrigatório para campanhas não-TRIGGER' })
   }
   if (scheduleType === 'TRIGGER') {
     if (!triggerType || !VALID_TRIGGER_TYPES.has(triggerType)) {
@@ -220,10 +222,12 @@ router.post('/', requireRole('ADMIN'), async (req, res) => {
     return res.status(400).json({ message: 'attributionScope inválido' })
   }
 
-  // segmentId must belong to this company
-  const segment = await prisma.marketingSegment.findFirst({ where: { id: segmentId, companyId } })
-  if (!segment) {
-    return res.status(400).json({ message: 'Segmento inválido ou não pertence à empresa' })
+  // segmentId must belong to this company (only when provided — TRIGGER may skip)
+  if (segmentId) {
+    const segment = await prisma.marketingSegment.findFirst({ where: { id: segmentId, companyId } })
+    if (!segment) {
+      return res.status(400).json({ message: 'Segmento inválido ou não pertence à empresa' })
+    }
   }
 
   // Optional cross-company guard checks
@@ -261,7 +265,7 @@ router.post('/', requireRole('ADMIN'), async (req, res) => {
     const created = await prisma.marketingCampaign.create({
       data: {
         companyId,
-        segmentId,
+        segmentId: segmentId || null,
         name: name.trim(),
         scheduleType,
         scheduledFor: parsedScheduledFor,
@@ -460,8 +464,20 @@ async function computePreflight(campaign, companyId) {
     }
   }
 
-  // 2. Evaluate audience
+  // 2. Evaluate audience — TRIGGER campaigns build the audience dynamically
+  // from incoming inbound messages (no pre-defined segment), so the segment
+  // gate is skipped entirely.
   let eligible = 0
+  if (campaign.scheduleType === 'TRIGGER') {
+    // Validate trigger-specific config exists (triggerType already validated
+    // on create, but the campaign may have been edited).
+    if (!campaign.triggerType) {
+      issues.push({ severity: 'error', code: 'no_trigger_type', msg: 'Tipo de gatilho não definido' })
+    }
+    // No empty-audience gate — trigger sweep decides at runtime.
+    return { eligible, issues }
+  }
+
   try {
     const customerIds = await evaluateSegment({ companyId, ruleJson: campaign.segment.ruleJson })
     eligible = customerIds.length
@@ -532,9 +548,12 @@ router.post('/:id/activate', requireRole('ADMIN'), async (req, res) => {
     })
   }
 
+  // TRIGGER goes straight to RUNNING — there's no scheduled-for moment to
+  // wait for; the cron sweep starts evaluating immediately.
+  const targetStatus = c.scheduleType === 'TRIGGER' ? 'RUNNING' : 'SCHEDULED'
   const updated = await prisma.marketingCampaign.update({
     where: { id },
-    data: { status: 'SCHEDULED' },
+    data: { status: targetStatus },
   })
   res.json(updated)
 })

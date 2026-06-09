@@ -3239,8 +3239,10 @@ model MarketingCampaign {
   id                    String                    @id @default(uuid())
   companyId             String
   company               Company                   @relation(fields: [companyId], references: [id])
-  segmentId             String
-  segment               MarketingSegment          @relation(fields: [segmentId], references: [id])
+  // Optional for TRIGGER scheduleType — public is built dynamically by the
+  // trigger evaluator from incoming inbound messages, not by a pre-defined segment.
+  segmentId             String?
+  segment               MarketingSegment?         @relation(fields: [segmentId], references: [id])
   name                  String
   scheduleType          MarketingScheduleType
   scheduledFor          DateTime?
