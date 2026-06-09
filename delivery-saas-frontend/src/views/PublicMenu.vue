@@ -5229,8 +5229,15 @@ async function submitOrder(){
 
     // Ensure we include the structured delivery address in shapes the backend may expect
     try{
+      // _newAddrFormatted holds the street/avenue name (input label
+      // "Endereço (rua, avenida)"), not a consolidated address — send it as
+      // `streetName` so the backend can build a clean canonical formatted
+      // string. `formattedAddress` is kept for backward compatibility.
+      const streetName = String((customer.value.address && customer.value.address.formattedAddress) || '')
       const structuredAddr = {
-        formattedAddress: String((customer.value.address && customer.value.address.formattedAddress) || ''),
+        formattedAddress: streetName,
+        streetName,
+        street: streetName,
         number: String((customer.value.address && customer.value.address.number) || ''),
         complement: String((customer.value.address && customer.value.address.complement) || ''),
         neighborhood: String((customer.value.address && customer.value.address.neighborhood) || neighborhood.value || ''),
