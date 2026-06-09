@@ -80,6 +80,11 @@ const funnel = computed(() => {
   }
 })
 
+function goToEdit() {
+  if (!campaign.value?.id) return
+  router.push(`/marketing/campaigns/${campaign.value.id}/edit`)
+}
+
 async function doAction(kind, confirmText) {
   const r = await Swal.fire({
     title: confirmText,
@@ -120,13 +125,23 @@ function fmtDateTime(s) {
             <span class="badge" :class="STATUS_LABELS[campaign.status]?.class">{{ STATUS_LABELS[campaign.status]?.label }}</span>
           </div>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 flex-wrap">
+          <BaseButton v-if="campaign.status === 'PAUSED' || campaign.status === 'DRAFT'" variant="outline"
+                      @click="goToEdit">
+            <i class="bi bi-pencil me-1"></i> Editar
+          </BaseButton>
           <BaseButton v-if="campaign.status === 'RUNNING' || campaign.status === 'SCHEDULED'" variant="outline"
-                      @click="doAction('pause', 'Pausar campanha?')">Pausar</BaseButton>
+                      @click="doAction('pause', 'Pausar campanha?')">
+            <i class="bi bi-pause-fill me-1"></i> Pausar
+          </BaseButton>
           <BaseButton v-if="campaign.status === 'PAUSED'" variant="primary"
-                      @click="doAction('resume', 'Retomar campanha?')">Retomar</BaseButton>
+                      @click="doAction('resume', 'Retomar campanha?')">
+            <i class="bi bi-play-fill me-1"></i> Retomar
+          </BaseButton>
           <BaseButton v-if="['DRAFT','SCHEDULED','RUNNING','PAUSED'].includes(campaign.status)" variant="danger"
-                      @click="doAction('cancel', 'Cancelar campanha? Esta ação é irreversível.')">Cancelar</BaseButton>
+                      @click="doAction('cancel', 'Cancelar campanha? Esta ação é irreversível.')">
+            <i class="bi bi-x-circle me-1"></i> Cancelar
+          </BaseButton>
         </div>
       </div>
 

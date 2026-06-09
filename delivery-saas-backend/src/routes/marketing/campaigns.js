@@ -579,7 +579,7 @@ router.post('/:id/pause', requireRole('ADMIN'), async (req, res) => {
   }
 })
 
-// Resume: PAUSED -> SCHEDULED
+// Resume: PAUSED -> SCHEDULED (ONE_SHOT/RECURRING) or RUNNING (TRIGGER)
 router.post('/:id/resume', requireRole('ADMIN'), async (req, res) => {
   const { companyId } = req.user
   const { id } = req.params
@@ -588,10 +588,14 @@ router.post('/:id/resume', requireRole('ADMIN'), async (req, res) => {
   if (c.status !== 'PAUSED') {
     return res.status(409).json({ message: `Campanha em status ${c.status} não pode ser retomada` })
   }
+  // TRIGGER campaigns resume directly to RUNNING (sweep cron picks them up
+  // immediately on the next iteration). ONE_SHOT/RECURRING go to SCHEDULED
+  // so the existing dispatcher chain re-materializes the run.
+  const targetStatus = c.scheduleType === 'TRIGGER' ? 'RUNNING' : 'SCHEDULED'
   try {
     const updated = await prisma.marketingCampaign.update({
       where: { id },
-      data: { status: 'SCHEDULED' },
+      data: { status: targetStatus },
     })
     return res.json(updated)
   } catch (e) {

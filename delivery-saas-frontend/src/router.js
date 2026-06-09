@@ -250,6 +250,11 @@ const router = createRouter({
     meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'marketing_campaigns' },
   },
   {
+    path: '/marketing/campaigns/:id/edit',
+    component: () => import('./views/marketing/CampaignBuilder.vue'),
+    meta: { requiresAuth: true, role: 'ADMIN', requiresModule: 'marketing_campaigns' },
+  },
+  {
     path: '/marketing/campaigns/:id',
     component: () => import('./views/marketing/CampaignDetail.vue'),
     meta: { requiresAuth: true, role: 'ATTENDANT', requiresModule: 'marketing_campaigns' },

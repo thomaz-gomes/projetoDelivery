@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import api from '../../api'
 import BaseButton from '../../components/BaseButton.vue'
 import MediaField from '../../components/MediaLibrary/MediaField.vue'
@@ -8,6 +8,12 @@ import { assetUrl } from '../../utils/assetUrl.js'
 import Swal from 'sweetalert2'
 
 const router = useRouter()
+const route = useRoute()
+// Quando a rota for /marketing/campaigns/:id/edit, abre o builder em modo
+// edição: carrega a campanha existente, popula form e habilita "salvar
+// alterações". O backend só aceita PATCH em DRAFT/PAUSED/SCHEDULED.
+const editingCampaignId = computed(() => route.params.id || null)
+const isEditing = computed(() => !!editingCampaignId.value)
 // step.value mapeia para o conteúdo: 1=Audiência, 2=Mensagem, 3=Quando, 4=Revisar.
 // A nova ORDEM visível ao operador (via stepOrder/visibleStepLabels) começa em
 // "Quando enviar" — então iniciamos em step=3.
@@ -200,6 +206,53 @@ onMounted(async () => {
     segments.value = segs.data
     channels.value = chans.data
     approvedTemplates.value = (tpls.data || []).filter(t => t.status === 'APPROVED')
+
+    // Modo edição: carrega campanha existente, popula form, pré-seleciona
+    // canal e seta campaignId.value para que persistDraft faça PATCH.
+    if (isEditing.value) {
+      try {
+        const { data: c } = await api.get(`/marketing/campaigns/${editingCampaignId.value}`)
+        if (!['DRAFT', 'PAUSED', 'SCHEDULED'].includes(c.status)) {
+          await Swal.fire({
+            icon: 'warning',
+            title: 'Não editável',
+            text: `Campanhas em status ${c.status} não podem ser editadas. Pause primeiro.`,
+          })
+          router.replace(`/marketing/campaigns/${c.id}`)
+          return
+        }
+        campaignId.value = c.id
+        form.value.name = c.name || ''
+        form.value.segmentId = c.segmentId || ''
+        form.value.templateId = c.templateId || ''
+        form.value.freeText = c.freeText || ''
+        form.value.mediaUrl = c.mediaUrl || null
+        form.value.scheduleType = c.scheduleType
+        form.value.scheduledFor = c.scheduledFor ? new Date(c.scheduledFor).toISOString().slice(0, 16) : ''
+        form.value.conversionWindowHours = c.conversionWindowHours || 48
+        form.value.attributionScope = c.attributionScope || 'menu'
+        // Re-deriva channelKey do canal + provider account
+        if (c.metaWaAccountId) form.value.channelKey = `meta:${c.metaWaAccountId}`
+        else if (c.evolutionInstanceName) form.value.channelKey = `evo:${c.evolutionInstanceName}`
+        else form.value.channelKey = ''
+        // Trigger params
+        if (c.scheduleType === 'TRIGGER') {
+          form.value.triggerType = c.triggerType || ''
+          const p = c.triggerParams || {}
+          form.value.triggerDelayMinutes = p.delayMinutes ?? 30
+          form.value.triggerMaxAgeHours = p.maxAgeHours ?? 23
+          form.value.triggerOnlyFirstTimeCustomers = !!p.onlyFirstTimeCustomers
+          form.value.triggerMinOrderValue = p.minOrderValue ?? ''
+          form.value.respectQuietHours = p.respectQuietHours !== false
+          form.value.quietHoursStart = p.quietHoursStart || '23:00'
+          form.value.quietHoursEnd = p.quietHoursEnd || '09:00'
+        }
+        if (c.segmentId) await loadAudienceCount()
+      } catch (e) {
+        Swal.fire({ icon: 'error', text: 'Falha ao carregar campanha para edição' })
+        router.push('/marketing/campaigns')
+      }
+    }
   } catch (e) {
     Swal.fire({ icon: 'error', text: 'Falha ao carregar dados iniciais' })
   }
@@ -320,7 +373,10 @@ async function activate() {
 
 <template>
   <div class="container py-4">
-    <h2 class="h4 mb-4">Nova campanha</h2>
+    <h2 class="h4 mb-4">
+      <i v-if="isEditing" class="bi bi-pencil-square me-2"></i>
+      {{ isEditing ? 'Editar campanha' : 'Nova campanha' }}
+    </h2>
 
     <!-- Progress indicator com círculos + linha conectora -->
     <div class="step-indicator mb-4">
