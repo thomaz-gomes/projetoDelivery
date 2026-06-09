@@ -26,9 +26,31 @@ const STATUS_LABELS = {
 }
 
 const MSG_STATUS_LABELS = {
-  QUEUED: 'Enfileirada', SENDING: 'Enviando', SENT: 'Enviada',
-  DELIVERED: 'Entregue', READ: 'Lida', FAILED: 'Falhou', OPTED_OUT: 'Opt-out',
+  QUEUED: 'Enfileirada',
+  SCHEDULED: 'Agendada (quiet hours)',
+  SENDING: 'Enviando',
+  SENT: 'Enviada',
+  DELIVERED: 'Entregue',
+  READ: 'Lida',
+  FAILED: 'Falhou',
+  OPTED_OUT: 'Opt-out',
+  SUPPRESSED_QUIET_HOURS: 'Suprimida (horário silencioso)',
 }
+
+const MSG_STATUS_BADGE_CLASS = {
+  QUEUED: 'bg-secondary',
+  SCHEDULED: 'bg-info text-dark',
+  SENDING: 'bg-primary',
+  SENT: 'bg-success',
+  DELIVERED: 'bg-success',
+  READ: 'bg-success',
+  FAILED: 'bg-danger',
+  OPTED_OUT: 'bg-warning text-dark',
+  SUPPRESSED_QUIET_HOURS: 'bg-dark',
+}
+
+function msgStatusLabel(s) { return MSG_STATUS_LABELS[s] || s }
+function msgStatusBadge(s) { return MSG_STATUS_BADGE_CLASS[s] || 'bg-secondary' }
 
 async function load() {
   loading.value = true
@@ -133,6 +155,14 @@ function fmtDateTime(s) {
             </ul>
             <div class="mb-2">Falhas:   {{ funnel.failed }}</div>
             <div class="mb-2">Opt-outs: {{ funnel.optedOut }}</div>
+            <div v-if="funnel.scheduled > 0" class="mb-2">
+              <span class="badge bg-info text-dark me-1">{{ funnel.scheduled }}</span>
+              <span class="small text-muted">aguardando horário (silencioso)</span>
+            </div>
+            <div v-if="funnel.suppressedQuietHours > 0" class="mb-2">
+              <span class="badge bg-dark me-1">{{ funnel.suppressedQuietHours }}</span>
+              <span class="small text-muted">suprimidas — janela 24h venceria fora do horário permitido</span>
+            </div>
             <hr/>
             <div class="fw-bold">Receita atribuída: {{ fmtCurrency(funnel.revenue) }}</div>
           </div>
@@ -157,7 +187,17 @@ function fmtDateTime(s) {
                 <tr v-for="m in messages" :key="m.id">
                   <td>{{ m.customer?.fullName }}</td>
                   <td>{{ m.customer?.whatsapp }}</td>
-                  <td><small>{{ MSG_STATUS_LABELS[m.status] || m.status }}</small></td>
+                  <td>
+                    <span class="badge" :class="msgStatusBadge(m.status)" style="font-size:0.7rem;">
+                      {{ msgStatusLabel(m.status) }}
+                    </span>
+                    <div v-if="m.status === 'SCHEDULED' && m.scheduledFor" class="text-muted" style="font-size:0.65rem;">
+                      para {{ fmtDateTime(m.scheduledFor) }}
+                    </div>
+                    <div v-else-if="m.status === 'SUPPRESSED_QUIET_HOURS' && m.errorMessage" class="text-muted" style="font-size:0.65rem;" :title="m.errorMessage">
+                      janela 24h venceria
+                    </div>
+                  </td>
                   <td><small>{{ fmtDateTime(m.sentAt) }}</small></td>
                   <td><small>{{ m.convertedValue ? fmtCurrency(m.convertedValue) : '—' }}</small></td>
                 </tr>

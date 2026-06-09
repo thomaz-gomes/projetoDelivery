@@ -634,6 +634,8 @@ router.get('/:id/stats', async (req, res) => {
     sent, delivered, read,
     failed: get('FAILED'),
     optedOut: get('OPTED_OUT'),
+    scheduled: get('SCHEDULED'),
+    suppressedQuietHours: get('SUPPRESSED_QUIET_HOURS'),
     converted,
     convertedStrong: strong,
     revenue: sum._sum.convertedValue || 0,
