@@ -153,14 +153,26 @@ const canActivate = computed(() => {
 // inbound, não há segmento a definir.
 const isTrigger = computed(() => form.value.scheduleType === 'TRIGGER')
 
-// Mapa interno step.value (1-4) → ordem original do código. Reusamos
-// step.value=1 para "Quando", =2 para "Audiência", =3 para "Mensagem", =4 para "Revisar".
+// Mapa interno step.value (1-4) reflete o bloco no template:
+//   step=1 → Audiência   step=2 → Mensagem   step=3 → Quando   step=4 → Revisar
+// stepOrder define a ORDEM visível ao operador (não a ordem dos blocos).
 const visibleStepLabels = computed(() => isTrigger.value
   ? ['Quando enviar', 'Mensagem', 'Revisar']
   : ['Quando enviar', 'Audiência', 'Mensagem', 'Revisar']
 )
-const stepOrder = computed(() => isTrigger.value ? [1, 3, 4] : [1, 2, 3, 4])
+const stepOrder = computed(() => isTrigger.value
+  ? [3, 2, 4]      // Quando → Mensagem → Revisar (pula Audiência)
+  : [3, 1, 2, 4]   // Quando → Audiência → Mensagem → Revisar
+)
 const currentStepIndex = computed(() => Math.max(0, stepOrder.value.indexOf(step.value)))
+
+// Gate de saída da etapa Mensagem (step.value=2):
+//   - TRIGGER → exige só freeText preenchido (sem preview de segmento — não tem segmento)
+//   - Outros  → mantém a regra antiga de previewSeen
+const canLeaveMessageStep = computed(() => {
+  if (isTrigger.value) return String(form.value.freeText || '').trim().length > 0
+  return previewSeen.value
+})
 
 async function goToNextStep() {
   const i = currentStepIndex.value
@@ -310,11 +322,22 @@ async function activate() {
   <div class="container py-4">
     <h2 class="h4 mb-4">Nova campanha</h2>
 
-    <!-- Progress -->
-    <div class="d-flex mb-4 gap-2">
-      <div v-for="(label, idx) in visibleStepLabels" :key="idx" class="flex-grow-1 text-center small"
-           :class="currentStepIndex === idx ? 'fw-bold text-primary' : 'text-muted'">
-        {{ idx + 1 }}. {{ label }}
+    <!-- Progress indicator com círculos + linha conectora -->
+    <div class="step-indicator mb-4">
+      <div
+        v-for="(label, idx) in visibleStepLabels"
+        :key="idx"
+        class="step-indicator__item"
+        :class="{
+          'step-indicator__item--active': currentStepIndex === idx,
+          'step-indicator__item--done': currentStepIndex > idx,
+        }"
+      >
+        <div class="step-indicator__circle">
+          <i v-if="currentStepIndex > idx" class="bi bi-check-lg"></i>
+          <span v-else>{{ idx + 1 }}</span>
+        </div>
+        <div class="step-indicator__label">{{ label }}</div>
       </div>
     </div>
 
@@ -383,8 +406,21 @@ async function activate() {
           campanhas pequenas e com mensagens personalizadas. Considere migrar para Cloud API.
         </div>
 
-        <!-- Cloud API (META_WA pinned OR AUTO mirror): template selector -->
-        <div v-if="channelType === 'META_WA' || (channelType === 'AUTO' && !!form.templateId)" class="mb-3">
+        <!-- TRIGGER: mensagem livre permitida (dentro da janela 24h) — independe do canal -->
+        <div v-if="isTrigger" class="mb-3">
+          <div class="alert alert-success small mb-2">
+            <i class="bi bi-check-circle-fill me-1"></i>
+            <strong>Mensagem livre permitida:</strong> como a campanha dispara dentro da
+            janela de 24h aberta pelo cliente, você pode escrever qualquer texto — não
+            precisa de template aprovado.
+          </div>
+          <label class="form-label">Texto da mensagem</label>
+          <textarea v-model="form.freeText" class="form-control" rows="6" placeholder="Olá {nome}, vi que você ficou em dúvida..."></textarea>
+          <small class="form-text">Placeholders: {nome}, {cliente}, {cupom}</small>
+        </div>
+
+        <!-- Cloud API (META_WA pinned OR AUTO mirror): template selector — só ONE_SHOT/RECURRING -->
+        <div v-if="!isTrigger && (channelType === 'META_WA' || (channelType === 'AUTO' && !!form.templateId))" class="mb-3">
           <label class="form-label">Template aprovado</label>
           <select v-model="form.templateId" class="form-select">
             <option value="">Selecione um template...</option>
@@ -400,8 +436,8 @@ async function activate() {
           </small>
         </div>
 
-        <!-- Evolution: free-text editor -->
-        <div v-if="channelType === 'EVOLUTION_WA'" class="mb-3">
+        <!-- Evolution: free-text editor — só ONE_SHOT/RECURRING -->
+        <div v-if="!isTrigger && channelType === 'EVOLUTION_WA'" class="mb-3">
           <label class="form-label">Texto da mensagem</label>
           <textarea v-model="form.freeText" class="form-control" rows="5" placeholder="Olá {nome}, ..."></textarea>
           <small class="form-text">Placeholders: {nome}, {cliente}, {cupom}</small>
@@ -452,7 +488,7 @@ async function activate() {
 
         <div class="d-flex justify-content-between mt-4">
           <BaseButton variant="outline" @click="goToPrevStep">← Voltar</BaseButton>
-          <BaseButton variant="primary" :disabled="!previewSeen" @click="goToNextStep">Próximo →</BaseButton>
+          <BaseButton variant="primary" :disabled="!canLeaveMessageStep" @click="goToNextStep">Próximo →</BaseButton>
         </div>
           </div>
         </div>
@@ -641,34 +677,113 @@ async function activate() {
     <!-- Step 4 -->
     <div v-if="step === 4" class="card">
       <div class="card-body">
-        <h5>Revisar e ativar</h5>
+        <h5 class="mb-4"><i class="bi bi-check2-square me-2"></i>Revisar e ativar</h5>
 
-        <div class="mb-3 small">
-          <div><strong>Nome:</strong> {{ form.name }}</div>
-          <div><strong>Segmento:</strong> {{ selectedSegment?.name }} ({{ preflight.eligible }} clientes)</div>
-          <div>
-            <strong>WhatsApp:</strong>
-            <template v-if="selectedChannel">
-              {{ selectedChannel.label }}
-              <span class="badge ms-1" :class="isOfficial ? 'bg-success' : 'bg-warning text-dark'">
-                {{ isOfficial ? 'Cloud (oficial)' : 'Evolution (não-oficial)' }}
-              </span>
-            </template>
-            <template v-else>Automático</template>
+        <div class="summary-grid mb-4">
+          <div class="summary-item">
+            <div class="summary-item__label">Nome</div>
+            <div class="summary-item__value">{{ form.name || '—' }}</div>
           </div>
-          <div><strong>Tipo:</strong> {{ form.scheduleType }} {{ form.scheduledFor ? `• Agendada para ${form.scheduledFor}` : '• Imediato' }}</div>
-          <div><strong>Janela de conversão:</strong> {{ form.conversionWindowHours }}h</div>
-          <div><strong>Escopo:</strong> {{ form.attributionScope }}</div>
+
+          <div class="summary-item" v-if="!isTrigger">
+            <div class="summary-item__label">Audiência</div>
+            <div class="summary-item__value">
+              {{ selectedSegment?.name || '—' }}
+              <div class="text-muted small mt-1">{{ preflight.eligible }} clientes elegíveis</div>
+            </div>
+          </div>
+
+          <div class="summary-item" v-if="isTrigger">
+            <div class="summary-item__label">Gatilho</div>
+            <div class="summary-item__value">
+              {{ form.triggerType === 'WINDOW_NO_ORDER'
+                ? 'Cliente abriu janela 24h sem pedido'
+                : form.triggerType === 'WINDOW_WITH_ORDER'
+                  ? 'Cliente abriu janela 24h e fez pedido'
+                  : '—' }}
+              <div class="text-muted small mt-1">
+                aguarda {{ form.triggerDelayMinutes }} min · janela máx {{ form.triggerMaxAgeHours }}h
+              </div>
+            </div>
+          </div>
+
+          <div class="summary-item">
+            <div class="summary-item__label">WhatsApp</div>
+            <div class="summary-item__value">
+              <template v-if="selectedChannel">
+                {{ selectedChannel.label }}
+                <div class="mt-1">
+                  <span class="badge" :class="isOfficial ? 'bg-success' : 'bg-warning text-dark'">
+                    {{ isOfficial ? 'Cloud (oficial)' : 'Evolution (não-oficial)' }}
+                  </span>
+                </div>
+              </template>
+              <template v-else>Automático</template>
+            </div>
+          </div>
+
+          <div class="summary-item">
+            <div class="summary-item__label">Quando enviar</div>
+            <div class="summary-item__value">
+              <template v-if="isTrigger">
+                Gatilho automático
+                <div class="text-muted small mt-1">contínuo, em segundo plano</div>
+              </template>
+              <template v-else-if="form.scheduledFor">
+                {{ new Date(form.scheduledFor).toLocaleString('pt-BR') }}
+              </template>
+              <template v-else>
+                Imediato após ativação
+              </template>
+            </div>
+          </div>
+
+          <div class="summary-item" v-if="isTrigger && form.respectQuietHours">
+            <div class="summary-item__label">Horário silencioso</div>
+            <div class="summary-item__value">
+              {{ form.quietHoursStart }} → {{ form.quietHoursEnd }}
+              <div class="text-muted small mt-1">mensagens fora desse intervalo são agendadas</div>
+            </div>
+          </div>
+
+          <div class="summary-item">
+            <div class="summary-item__label">Janela de conversão</div>
+            <div class="summary-item__value">{{ form.conversionWindowHours }}h</div>
+          </div>
+
+          <div class="summary-item">
+            <div class="summary-item__label">Escopo de atribuição</div>
+            <div class="summary-item__value">
+              {{ form.attributionScope === 'menu' ? 'Apenas cardápio do segmento' : 'Qualquer cardápio da empresa' }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Preview da mensagem -->
+        <div class="mb-4">
+          <div class="summary-item__label mb-2"><i class="bi bi-chat-quote me-1"></i> Pré-visualização da mensagem</div>
+          <div class="summary-message-preview" v-if="form.freeText">{{ freeTextPreview || form.freeText }}</div>
+          <div class="summary-message-preview" v-else-if="selectedTemplate">
+            <em class="text-muted">Template aprovado: <strong>{{ selectedTemplate.name }}</strong></em>
+            <div v-if="templateParts?.bodyText" class="mt-2">{{ templateParts.bodyText }}</div>
+          </div>
+          <div v-else class="alert alert-warning mb-0 small">
+            Nenhuma mensagem configurada — volte para a etapa Mensagem.
+          </div>
         </div>
 
         <div v-if="preflight.issues.length" class="mb-3">
-          <div v-for="(i, idx) in preflight.issues" :key="idx"
-               class="alert" :class="{
-                 'alert-danger':  i.severity === 'error',
-                 'alert-warning': i.severity === 'warning',
-                 'alert-info':    i.severity === 'confirm',
-               }">
-            {{ i.msg }}
+          <div
+            v-for="(i, idx) in preflight.issues" :key="idx"
+            class="alert d-flex align-items-start gap-2 mb-2"
+            :class="{
+              'alert-danger':  i.severity === 'error',
+              'alert-warning': i.severity === 'warning',
+              'alert-info':    i.severity === 'confirm',
+            }"
+          >
+            <i class="bi" :class="i.severity === 'error' ? 'bi-x-octagon-fill' : 'bi-exclamation-triangle-fill'"></i>
+            <div>{{ i.msg }}</div>
           </div>
         </div>
 
@@ -680,10 +795,118 @@ async function activate() {
         <div class="d-flex justify-content-between mt-4">
           <BaseButton variant="outline" @click="goToPrevStep">← Voltar</BaseButton>
           <BaseButton variant="primary" :loading="activating" :disabled="!canActivate" @click="activate">
-            🚀 Ativar campanha
+            <i class="bi bi-rocket-takeoff me-1"></i> Ativar campanha
           </BaseButton>
         </div>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Step indicator visual: círculo numerado + label, linha entre eles */
+.step-indicator {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  position: relative;
+}
+.step-indicator__item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  text-align: center;
+}
+/* linha conectora atrás dos círculos */
+.step-indicator__item:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  right: -50%;
+  height: 2px;
+  background: #dee2e6;
+  z-index: 0;
+}
+.step-indicator__item--done:not(:last-child)::after {
+  background: #198754;
+}
+.step-indicator__circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #dee2e6;
+  color: #6c757d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.9rem;
+  position: relative;
+  z-index: 1;
+  transition: all 0.2s ease;
+}
+.step-indicator__item--active .step-indicator__circle {
+  border-color: #0d6efd;
+  background: #0d6efd;
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.15);
+}
+.step-indicator__item--done .step-indicator__circle {
+  border-color: #198754;
+  background: #198754;
+  color: #fff;
+}
+.step-indicator__label {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: #6c757d;
+  font-weight: 500;
+}
+.step-indicator__item--active .step-indicator__label {
+  color: #0d6efd;
+  font-weight: 700;
+}
+.step-indicator__item--done .step-indicator__label {
+  color: #198754;
+}
+
+/* Summary card no Revisar */
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.summary-item {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 12px 14px;
+  border: 1px solid #e9ecef;
+}
+.summary-item__label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6c757d;
+  margin-bottom: 4px;
+}
+.summary-item__value {
+  font-size: 0.95rem;
+  color: #212529;
+  font-weight: 500;
+  word-break: break-word;
+}
+.summary-message-preview {
+  background: #e3f2fd;
+  border-left: 4px solid #0d6efd;
+  border-radius: 6px;
+  padding: 14px 16px;
+  white-space: pre-wrap;
+  font-size: 0.9rem;
+  color: #212529;
+  line-height: 1.5;
+}
+</style>
