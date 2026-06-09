@@ -443,8 +443,9 @@ async function activate() {
           <small class="form-text">Placeholders: {nome}, {cliente}, {cupom}</small>
         </div>
 
-        <!-- AUTO mode without a pinned template: show the picker as a hint -->
-        <div v-if="channelType === 'AUTO' && !form.templateId" class="mb-3">
+        <!-- AUTO mode without a pinned template: show the picker as a hint
+             (não-TRIGGER — para TRIGGER, free text é a única forma de mensagem) -->
+        <div v-if="!isTrigger && channelType === 'AUTO' && !form.templateId" class="mb-3">
           <label class="form-label">Template aprovado (opcional — usado se o canal escolhido for Cloud)</label>
           <select v-model="form.templateId" class="form-select">
             <option value="">Sem template (apenas Evolution)</option>
