@@ -160,8 +160,9 @@ router.post('/templates/seed-defaults', requireRole('ADMIN'), async (req, res) =
       return res.status(400).json({ message: 'Conta sem wabaId — necessário pra criar templates' });
     }
 
-    const results = [];
-    for (const entry of DEFAULT_TEMPLATES) {
+    // Paraleliza submissão na Meta (8 chamadas concorrentes) pra evitar timeout
+    // do frontend. Cada item resolve com {item, row} ou {item} se falhou.
+    const seedOne = async (entry) => {
       const item = {
         notificationType: entry.notificationType,
         name: entry.name,
@@ -171,7 +172,6 @@ router.post('/templates/seed-defaults', requireRole('ADMIN'), async (req, res) =
         error: null,
       };
 
-      // Idempotência: se já existe local (account + name + language), reusa.
       let row = await prisma.metaTemplate.findFirst({
         where: { metaWaAccountId: account.id, name: entry.name, language: DEFAULT_TEMPLATE_LANGUAGE },
       });
@@ -206,8 +206,7 @@ router.post('/templates/seed-defaults', requireRole('ADMIN'), async (req, res) =
           item.metaCode = metaErr?.code || null;
           console.error('[meta/templates seed-defaults] submit failed',
             entry.notificationType, item.error);
-          results.push(item);
-          continue;
+          return { item, row: null };
         }
       } else {
         item.skipped = true;
@@ -216,12 +215,23 @@ router.post('/templates/seed-defaults', requireRole('ADMIN'), async (req, res) =
       item.status = row.status;
       item.externalId = row.externalId || null;
       item.templateId = row.id;
+      return { item, row, entry };
+    };
 
-      // Auto-mapping: cria/atualiza NotificationTemplateMapping para o tipo
-      // correspondente. trySendViaTemplate em notify.js só usa o template se
-      // status === 'APPROVED', então mapear PENDING é seguro (não dispara
-      // template prematuro). Quando o webhook de update mudar pra APPROVED,
-      // já fica ativo automaticamente.
+    const settled = await Promise.allSettled(DEFAULT_TEMPLATES.map(seedOne));
+    const results = [];
+    for (const s of settled) {
+      if (s.status === 'rejected') {
+        results.push({ error: s.reason?.message || 'unknown' });
+        continue;
+      }
+      const { item, row, entry } = s.value;
+      results.push(item);
+      if (!row || !entry) continue;
+
+      // Auto-mapping serializado depois (toques rápidos no DB, sem rate
+      // limiting na Meta — paralelizar não traz ganho). Mantém transacional
+      // mais simples.
       try {
         await prisma.notificationTemplateMapping.upsert({
           where: {
@@ -243,8 +253,6 @@ router.post('/templates/seed-defaults', requireRole('ADMIN'), async (req, res) =
         console.warn('[meta/templates seed-defaults] mapping upsert failed',
           entry.notificationType, mapErr?.message);
       }
-
-      results.push(item);
     }
 
     return res.json({

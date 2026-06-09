@@ -131,7 +131,7 @@ async function seedDefaults() {
   if (!confirm.isConfirmed) return
   seeding.value = true
   try {
-    const resp = await api.post('/meta/templates/seed-defaults', { accountId: selectedAccountId.value })
+    const resp = await api.post('/meta/templates/seed-defaults', { accountId: selectedAccountId.value }, { timeout: 60000 })
     const { submitted = 0, skipped = 0, failed = 0, results = [] } = resp.data || {}
     const errorList = results.filter(r => r.error)
     const summaryHtml = `
