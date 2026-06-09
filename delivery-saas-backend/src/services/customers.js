@@ -20,8 +20,12 @@ export function normalizePhone(n) {
 // Returns null when there's no street — callers should then fall back to whatever
 // raw "formatted" string came in the payload.
 export function composeFormattedAddress({ street, number, complement, neighborhood, city, state, postalCode } = {}) {
+  // Require a real street name. Composing from "number + neighborhood" alone
+  // produces things like "611, prédio, Juca Rosa" which look like an address
+  // but are missing the road name — worse than falling back to the raw
+  // formatted string the caller already had.
+  if (!street || !String(street).trim()) return null;
   const streetPart = [street, number].filter(Boolean).join(', ').trim();
-  if (!streetPart) return null;
   const parts = [streetPart];
   if (complement) parts.push(complement);
   if (neighborhood) parts.push(neighborhood);
@@ -40,8 +44,17 @@ function mapAddressFromPayload(payload) {
   const lngRawRaw = (c && (c.longitude !== undefined && c.longitude !== null)) ? c.longitude : (a.longitude ?? null);
   const latRaw = (latRawRaw === '' || latRawRaw === undefined) ? null : latRawRaw;
   const lngRaw = (lngRawRaw === '' || lngRawRaw === undefined) ? null : lngRawRaw;
+  // PublicMenu sends the street name in `formattedAddress` (legacy: the
+  // "_newAddrFormatted" input holds "rua/avenida", not a consolidated string).
+  // When street/streetName are absent but other components are present, treat
+  // formattedAddress as the street so composeFormattedAddress can build a
+  // proper canonical string instead of emitting "611, prédio, Juca Rosa".
+  const explicitStreet = a.streetName || a.street || null;
+  const rawFormatted = a.formattedAddress || a.formatted || null;
+  const hasSeparateComponents = !!(a.streetNumber || a.number || a.neighborhood || a.neigh || a.complement || a.complemento);
+  const street = explicitStreet || (hasSeparateComponents && rawFormatted ? rawFormatted : null);
   const components = {
-    street: a.streetName || a.street || null,
+    street,
     number: a.streetNumber || a.number || null,
     complement: a.complement || a.complemento || null,
     neighborhood: a.neighborhood || a.neigh || null,
@@ -50,7 +63,12 @@ function mapAddressFromPayload(payload) {
     postalCode: a.postalCode || a.zip || null,
   };
   return {
-    formatted: composeFormattedAddress(components) || a.formattedAddress || a.formatted || null,
+    // Prefer the canonical composition. Fall back to the raw formatted string
+    // only in the legacy case where we got a consolidated string with no
+    // separate components — there's nothing to compose from, so the raw blob
+    // is all we have. When components ARE present, the raw was already
+    // consumed as the street above, so don't repeat it.
+    formatted: composeFormattedAddress(components) || (!hasSeparateComponents ? rawFormatted : null) || null,
     street: components.street,
     number: components.number,
     complement: components.complement,
