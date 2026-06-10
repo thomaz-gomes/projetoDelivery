@@ -20,8 +20,21 @@ export async function evaluateWindowNoOrder({ campaign, now = new Date() }) {
   const earliestInbound = new Date(now.getTime() - maxAgeHours * 60 * 60 * 1000)
   const latestInbound = new Date(now.getTime() - delayMinutes * 60 * 1000)
 
+  // Quando o operador pinou um canal específico (Meta WA account ou Evolution
+  // instance) na campanha, filtramos as conversas pelo MESMO providerAccountId
+  // / instanceName — campanha só dispara pra clientes que entraram em contato
+  // pelo número escolhido. Sem pin, vale qualquer canal WhatsApp da empresa.
+  const channelFilter = {}
+  if (campaign.metaWaAccountId) {
+    channelFilter.providerAccountId = campaign.metaWaAccountId
+    channelFilter.provider = 'META_WA'
+  } else if (campaign.evolutionInstanceName) {
+    channelFilter.instanceName = campaign.evolutionInstanceName
+    channelFilter.provider = 'EVOLUTION_WA'
+  }
+
   // Candidatas: conversas WhatsApp com inbound recente, ainda dentro da
-  // janela de 24h e além do delay. Filtra por menuId se especificado.
+  // janela de 24h e além do delay. Filtra por menuId/canal se especificado.
   const conversations = await prisma.conversation.findMany({
     where: {
       companyId: campaign.companyId,
@@ -29,6 +42,7 @@ export async function evaluateWindowNoOrder({ campaign, now = new Date() }) {
       lastInboundAt: { gte: earliestInbound, lte: latestInbound },
       customerId: { not: null },
       ...(onlyMenuId ? { menuId: onlyMenuId } : {}),
+      ...channelFilter,
     },
     select: {
       id: true,

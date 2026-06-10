@@ -34,6 +34,18 @@ export async function evaluateWindowWithOrder({ campaign, now = new Date() }) {
 
   const customerIds = [...new Set(orders.map(o => o.customerId))]
 
+  // Quando o operador pinou um canal específico (Meta WA account ou Evolution
+  // instance) na campanha, filtramos as conversas pelo MESMO canal — campanha
+  // só dispara pra clientes que entraram em contato pelo número escolhido.
+  const channelFilter = {}
+  if (campaign.metaWaAccountId) {
+    channelFilter.providerAccountId = campaign.metaWaAccountId
+    channelFilter.provider = 'META_WA'
+  } else if (campaign.evolutionInstanceName) {
+    channelFilter.instanceName = campaign.evolutionInstanceName
+    channelFilter.provider = 'EVOLUTION_WA'
+  }
+
   // Conversas correspondentes — precisa estar dentro da janela inbound.
   const conversations = await prisma.conversation.findMany({
     where: {
@@ -41,6 +53,7 @@ export async function evaluateWindowWithOrder({ campaign, now = new Date() }) {
       channel: 'WHATSAPP',
       customerId: { in: customerIds },
       lastInboundAt: { gte: earliestInbound },
+      ...channelFilter,
     },
     select: {
       id: true, customerId: true, lastInboundAt: true,

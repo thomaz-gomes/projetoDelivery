@@ -84,6 +84,9 @@ const templateSupportsImage = computed(() => {
   return header && String(header.format || '').toUpperCase() === 'IMAGE'
 })
 const canAttachImage = computed(() => {
+  // TRIGGER sempre dentro da janela 24h da Meta → mídia livre permitida em
+  // qualquer canal (Cloud API aceita `type: image` + caption sem template).
+  if (form.value.scheduleType === 'TRIGGER') return true
   if (channelType.value === 'EVOLUTION_WA') return true
   if (channelType.value === 'META_WA') return templateSupportsImage.value
   // AUTO: image renders only if the resolved channel happens to be Evolution
