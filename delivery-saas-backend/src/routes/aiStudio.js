@@ -289,8 +289,11 @@ router.post('/generate', requireRole('ADMIN'), async (req, res) => {
   const descTrimmed = (description || '').trim()
   const VALID_RATIOS = ['1:1', '16:9', '9:16']
   const safeRatio = VALID_RATIOS.includes(aspectRatio) ? aspectRatio : '1:1'
-  if (!STYLE_PROMPTS[style]) return res.status(400).json({ message: `Estilo inválido: ${style}` })
+  // 'reference' = estilo copiado da foto de referência (não tem entrada em STYLE_PROMPTS)
+  if (style !== 'reference' && !STYLE_PROMPTS[style]) return res.status(400).json({ message: `Estilo inválido: ${style}` })
   if (!ANGLE_PROMPTS[angle]) return res.status(400).json({ message: `Ângulo inválido: ${angle}` })
+  // Estilo usado nas linhas de prompt que dependem de STYLE_PROMPTS (fallback p/ 'minimal')
+  const styleForPrompt = STYLE_PROMPTS[style] ? style : 'minimal'
   const qty = Math.max(1, Math.min(3, Math.floor(Number(quantity) || 1)))
 
   // Imagens opcionais (data URI base64):
@@ -401,7 +404,7 @@ router.post('/generate', requireRole('ADMIN'), async (req, res) => {
         lines.push(`TARGET STYLE — recreate this photographic style${sceneImg ? ' (lighting, color grading and mood)' : ' for lighting, color grading, mood, background, surface and composition'}: ${refStyleText || 'cinematic high-end food photography with dramatic directional light and rich color grading'}.`)
       }
       if (!sceneImg && !referenceImg) {
-        lines.push(`LIGHTING AND SURFACE: ${STYLE_PROMPTS[style]}.`)
+        lines.push(`LIGHTING AND SURFACE: ${STYLE_PROMPTS[styleForPrompt]}.`)
         lines.push(`CAMERA: ${ANGLE_PROMPTS[angle]}.`)
       }
       lines.push(`IMAGE FORMAT: ${RATIO_PROMPTS[safeRatio]}. The output image MUST be in ${safeRatio} aspect ratio.`)
@@ -412,7 +415,7 @@ router.post('/generate', requireRole('ADMIN'), async (req, res) => {
       imagenPrompt =
         `A real food photograph taken with a Canon EOS R5 DSLR, 100mm f/2.8 macro lens. ` +
         `Subject: ${descTrimmed}. ` +
-        `Setting: ${STYLE_PROMPTS[style]}. ` +
+        `Setting: ${STYLE_PROMPTS[styleForPrompt]}. ` +
         `Composition: ${ANGLE_PROMPTS[angle]}. ` +
         `Authentic natural food textures, realistic surface imperfections, genuine color rendition. ` +
         `Natural imperfections: food must never look uniform or CGI-perfect. ` +

@@ -80,34 +80,6 @@
               <input ref="productFileInput" type="file" accept="image/jpeg,image/png,image/webp" style="display:none" @change="onSlotChange($event, productSlot)" />
             </div>
 
-            <!-- Referencia: estilo / iluminacao (opcional) -->
-            <div class="mb-3">
-              <label class="form-label small fw-semibold">
-                <i class="bi bi-image me-1"></i>Referencia <span class="fw-normal text-muted">(opcional)</span>
-              </label>
-              <div
-                class="sia-ref-dropzone"
-                :class="{ 'drag-over': refDragOver }"
-                @click="$refs.refFileInput.click()"
-                @dragover.prevent="refDragOver = true"
-                @dragleave.prevent="refDragOver = false"
-                @drop.prevent="onSlotDrop($event, refSlot)"
-              >
-                <div v-if="genRefPreview" class="sia-ref-preview">
-                  <img :src="genRefPreview" alt="Referencia" />
-                  <button type="button" class="btn btn-sm btn-outline-danger sia-ref-clear" @click.stop="clearSlot(refSlot)">
-                    <i class="bi bi-x-lg"></i>
-                  </button>
-                </div>
-                <template v-else>
-                  <i class="bi bi-image-alt" style="font-size:1.5rem;opacity:.35"></i>
-                  <span class="small text-muted mt-1">Arraste ou clique para enviar uma referencia</span>
-                </template>
-              </div>
-              <div class="form-text">A IA copia apenas o estilo: iluminacao, cores, clima e composicao — nao os ingredientes</div>
-              <input ref="refFileInput" type="file" accept="image/jpeg,image/png,image/webp" style="display:none" @change="onSlotChange($event, refSlot)" />
-            </div>
-
             <!-- Cenario: foto da cena/mesa (opcional) -->
             <div class="mb-3">
               <label class="form-label small fw-semibold">
@@ -176,7 +148,7 @@
               </label>
               <div class="sia-style-grid">
                 <label
-                  v-for="s in STYLES"
+                  v-for="s in GEN_STYLES"
                   :key="s.key"
                   :class="['sia-style-card', { active: genStyle === s.key }]"
                 >
@@ -186,6 +158,34 @@
                   <span class="sia-style-desc">{{ s.desc }}</span>
                 </label>
               </div>
+            </div>
+
+            <!-- Referencia: aparece (e e obrigatoria) quando o estilo "Foto de referencia" e escolhido -->
+            <div v-if="genStyle === 'reference'" class="mb-3">
+              <label class="form-label small fw-semibold">
+                <i class="bi bi-image me-1"></i>Referencia <span class="fw-normal text-danger">(obrigatorio)</span>
+              </label>
+              <div
+                class="sia-ref-dropzone"
+                :class="{ 'drag-over': refDragOver }"
+                @click="$refs.refFileInput.click()"
+                @dragover.prevent="refDragOver = true"
+                @dragleave.prevent="refDragOver = false"
+                @drop.prevent="onSlotDrop($event, refSlot)"
+              >
+                <div v-if="genRefPreview" class="sia-ref-preview">
+                  <img :src="genRefPreview" alt="Referencia" />
+                  <button type="button" class="btn btn-sm btn-outline-danger sia-ref-clear" @click.stop="clearSlot(refSlot)">
+                    <i class="bi bi-x-lg"></i>
+                  </button>
+                </div>
+                <template v-else>
+                  <i class="bi bi-image-alt" style="font-size:1.5rem;opacity:.35"></i>
+                  <span class="small text-muted mt-1">Arraste ou clique para enviar uma referencia</span>
+                </template>
+              </div>
+              <div class="form-text">A IA copia apenas o estilo: iluminacao, cores, clima e composicao — nao os ingredientes</div>
+              <input ref="refFileInput" type="file" accept="image/jpeg,image/png,image/webp" style="display:none" @change="onSlotChange($event, refSlot)" />
             </div>
 
             <!-- Angulo -->
@@ -243,7 +243,7 @@
               <button
                 type="button"
                 class="btn btn-warning fw-bold ms-auto"
-                :disabled="(!genDescription.trim() && !genProductFile) || genLoading"
+                :disabled="(!genDescription.trim() && !genProductFile) || (genStyle === 'reference' && !genRefFile) || genLoading"
                 @click="generateFromText"
               >
                 <span v-if="genLoading" class="spinner-border spinner-border-sm me-1" role="status"></span>
@@ -722,6 +722,12 @@ const STYLES = [
   { key: 'vibrant', name: 'Vibrante',    emoji: '\u{1F308}', desc: 'Cores vivas, estilo delivery' },
 ]
 
+// Estilos da aba "Criar do Zero": estilos padrão + opção de copiar o estilo de uma foto de referência
+const GEN_STYLES = [
+  ...STYLES,
+  { key: 'reference', name: 'Foto de referencia', emoji: '\u{1F5BC}️', desc: 'Copie o estilo de uma foto' },
+]
+
 const ANGLES = [
   { key: 'top',      name: 'Top (90)',      emoji: '\u2B06\uFE0F', sub: 'Pizzas, Bowls' },
   { key: 'standard', name: 'Standard (45)', emoji: '\u2197\uFE0F', sub: 'Pratos, Burgers' },
@@ -1000,7 +1006,7 @@ async function generateFromText() {
       quantity: genQuantity.value,
     }
     if (genProductBase64.value) payload.productBase64 = genProductBase64.value
-    if (genRefBase64.value) payload.referenceBase64 = genRefBase64.value
+    if (genStyle.value === 'reference' && genRefBase64.value) payload.referenceBase64 = genRefBase64.value
     if (genSceneBase64.value) payload.sceneBase64 = genSceneBase64.value
     const res = await api.post('/ai-studio/generate', payload, { timeout: 300000 })
     genResults.value = res.data.media || []
