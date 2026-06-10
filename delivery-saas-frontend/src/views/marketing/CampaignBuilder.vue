@@ -319,7 +319,7 @@ async function persistDraft() {
   const chPart = buildChannelPayload()
   const payload = {
     name: form.value.name || `Campanha ${new Date().toLocaleDateString('pt-BR')}`,
-    segmentId: form.value.segmentId,
+    segmentId: form.value.segmentId || null,
     scheduleType: form.value.scheduleType,
     scheduledFor: form.value.scheduledFor ? new Date(form.value.scheduledFor).toISOString() : null,
     ...chPart,

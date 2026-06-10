@@ -319,7 +319,16 @@ router.patch('/:id', requireRole('ADMIN'), async (req, res) => {
         break
       }
       case 'segmentId': {
-        if (!val) return res.status(400).json({ message: 'segmentId inválido' })
+        // TRIGGER campaigns build the audience dynamically — segmentId can be null.
+        // Effective scheduleType = new value (if being patched) || existing.
+        const effectiveScheduleType = body.scheduleType ?? existing.scheduleType
+        if (!val) {
+          if (effectiveScheduleType !== 'TRIGGER') {
+            return res.status(400).json({ message: 'segmentId é obrigatório para campanhas não-TRIGGER' })
+          }
+          data.segmentId = null
+          break
+        }
         const seg = await prisma.marketingSegment.findFirst({ where: { id: val, companyId } })
         if (!seg) return res.status(400).json({ message: 'Segmento inválido ou não pertence à empresa' })
         data.segmentId = val
