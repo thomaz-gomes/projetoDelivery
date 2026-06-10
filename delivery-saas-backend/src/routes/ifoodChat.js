@@ -10,6 +10,7 @@ router.use(authMiddleware)
 const DEFAULTS = [
   { status: 'CONFIRMED', message: 'Olá {nome}! 😊 Estamos preparando o seu pedido #{numero} com muito carinho. 💜', enabled: true },
   { status: 'DISPATCHED', message: '{nome}! O seu pedido #{numero} acabou de sair para entrega! 🛵 Fique atento que em breve o entregador estará no endereço solicitado.', enabled: true },
+  { status: 'READY_PICKUP', message: 'Boas notícias, {nome}! 🎉 O seu pedido #{numero} está pronto para retirada. Estamos te esperando! 😊', enabled: true },
   { status: 'DELIVERED', message: 'Agora que seu pedido foi entregue, ficaríamos muito felizes se você pudesse dedicar um momento para avaliá-lo. Sua opinião é extremamente valiosa para nós! 🌟', enabled: true },
   { status: 'MANUAL', message: 'Olá {nome}! Temos uma mensagem sobre o seu pedido #{numero}.', enabled: false },
 ]
@@ -20,10 +21,13 @@ router.get('/messages/:storeId', requireRole('ADMIN'), async (req, res) => {
     const { storeId } = req.params
     let messages = await prisma.ifoodChatMessage.findMany({ where: { storeId } })
 
-    // Seed defaults if empty
-    if (messages.length === 0) {
+    // Seed any missing defaults (covers stores seeded before novos status,
+    // ex.: READY_PICKUP adicionado depois do seed original)
+    const existingStatuses = new Set(messages.map(m => m.status))
+    const missing = DEFAULTS.filter(d => !existingStatuses.has(d.status))
+    if (missing.length > 0) {
       await prisma.ifoodChatMessage.createMany({
-        data: DEFAULTS.map(d => ({ ...d, storeId })),
+        data: missing.map(d => ({ ...d, storeId })),
         skipDuplicates: true,
       })
       messages = await prisma.ifoodChatMessage.findMany({ where: { storeId } })

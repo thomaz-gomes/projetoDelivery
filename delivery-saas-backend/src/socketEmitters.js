@@ -283,7 +283,7 @@ export function emitirInboxMessageStatus({ companyId, conversationId, messageId,
 }
 
 // ---- emit: ifood:chat (to extension sockets only, scoped by company) ----
-// `kind` identifica o tipo de mensagem (CONFIRMED, DISPATCHED, DELIVERED, MANUAL)
+// `kind` identifica o tipo de mensagem (CONFIRMED, READY_PICKUP, DISPATCHED, DELIVERED, MANUAL)
 // — usado pela extensão pra TTL e dedup. `createdAt` permite descarte de
 // mensagens antigas no backlog quando a aba reativa após horas inativa.
 //

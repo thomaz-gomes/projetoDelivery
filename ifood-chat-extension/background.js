@@ -15,6 +15,7 @@ let activeTabUrl = '';
 // despachar. `null` = sem TTL.
 const KIND_TTL_MS = {
   CONFIRMED: 10 * 60 * 1000,   // 10 min — pedido confirmado, ainda relevante por pouco
+  READY_PICKUP: 30 * 60 * 1000, // 30 min — pronto para retirada
   DISPATCHED: 30 * 60 * 1000,  // 30 min — saiu pra entrega
   DELIVERED: 2 * 60 * 60 * 1000, // 2h — agradecimento/avaliação
   MANUAL: 2 * 60 * 60 * 1000,  // manual: trata como DELIVERED

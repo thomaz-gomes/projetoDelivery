@@ -1,9 +1,25 @@
 import { prisma } from '../prisma.js'
 
-function mapStatusToChatKey(internalStatus) {
+function isPickupOrder(order) {
+  const ot = order?.orderType
+    || order?.payload?.orderType
+    || order?.payload?.order?.orderType
+    || order?.payload?.type
+  const upto = ot ? String(ot).toUpperCase() : ''
+  return upto === 'TAKEOUT' || upto === 'PICKUP' || upto === 'TAKE-OUT' || upto === 'PICK-UP'
+}
+
+function mapStatusToChatKey(internalStatus, order) {
   switch (internalStatus) {
     case 'EM_PREPARO': return 'CONFIRMED'
-    case 'SAIU_PARA_ENTREGA': return 'DISPATCHED'
+    // SAIU_PARA_ENTREGA em pedido de retirada significa "aguardando retirada"
+    // (não existe entregador a caminho) — avisa que o pedido está pronto.
+    case 'SAIU_PARA_ENTREGA': return isPickupOrder(order) ? 'READY_PICKUP' : 'DISPATCHED'
+    // PRONTO é o status interno gerado pelo evento READY_TO_PICKUP do iFood —
+    // mesmo aviso de retirada. Em delivery, PRONTO (etapa antes do despacho)
+    // não notifica o cliente. Dedup por orderId+kind evita mensagem dupla
+    // quando o pedido passa por PRONTO e depois SAIU_PARA_ENTREGA.
+    case 'PRONTO': return isPickupOrder(order) ? 'READY_PICKUP' : null
     case 'CONCLUIDO': return 'DELIVERED'
     default: return null
   }
@@ -27,7 +43,7 @@ export async function tryEmitIfoodChat(order, newStatus) {
   try {
     if (!isIfoodOrder(order)) return
 
-    const chatKey = mapStatusToChatKey(newStatus)
+    const chatKey = mapStatusToChatKey(newStatus, order)
     if (!chatKey) return
 
     const storeId = order.storeId

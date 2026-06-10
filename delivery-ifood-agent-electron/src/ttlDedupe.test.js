@@ -37,6 +37,7 @@ test('dedupKey: null quando sem id nenhum', () => {
 
 test('KIND_TTL_MS: valores corretos', () => {
   assert.equal(KIND_TTL_MS.CONFIRMED, 10 * 60 * 1000)
+  assert.equal(KIND_TTL_MS.READY_PICKUP, 30 * 60 * 1000)
   assert.equal(KIND_TTL_MS.DISPATCHED, 30 * 60 * 1000)
   assert.equal(KIND_TTL_MS.DELIVERED, 2 * 60 * 60 * 1000)
 })

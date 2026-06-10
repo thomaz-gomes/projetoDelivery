@@ -74,6 +74,7 @@ const chatGenerating = ref(false);
 
 const chatStatusLabels = {
   CONFIRMED: 'Pedido Confirmado',
+  READY_PICKUP: 'Pronto para Retirada',
   DISPATCHED: 'Saiu para Entrega',
   DELIVERED: 'Pedido Entregue',
   MANUAL: 'Mensagem Manual (botão)',

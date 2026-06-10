@@ -4,6 +4,7 @@ const path = require('path')
 
 const KIND_TTL_MS = {
   CONFIRMED: 10 * 60 * 1000,
+  READY_PICKUP: 30 * 60 * 1000,
   DISPATCHED: 30 * 60 * 1000,
   DELIVERED: 2 * 60 * 60 * 1000,
   MANUAL: 2 * 60 * 60 * 1000,
