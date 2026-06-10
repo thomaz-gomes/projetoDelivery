@@ -39,6 +39,7 @@ const form = ref({
   triggerDelayMinutes: 30,
   triggerMaxAgeHours: 23,
   triggerOnlyFirstTimeCustomers: false,
+  triggerOnlyNeverOrdered: false,
   triggerMinOrderValue: '',
   respectQuietHours: true,
   quietHoursStart: '23:00',
@@ -245,6 +246,7 @@ onMounted(async () => {
           form.value.triggerDelayMinutes = p.delayMinutes ?? 30
           form.value.triggerMaxAgeHours = p.maxAgeHours ?? 23
           form.value.triggerOnlyFirstTimeCustomers = !!p.onlyFirstTimeCustomers
+          form.value.triggerOnlyNeverOrdered = !!p.onlyNeverOrdered
           form.value.triggerMinOrderValue = p.minOrderValue ?? ''
           form.value.respectQuietHours = p.respectQuietHours !== false
           form.value.quietHoursStart = p.quietHoursStart || '23:00'
@@ -339,6 +341,9 @@ async function persistDraft() {
       ...(form.value.triggerType === 'WINDOW_WITH_ORDER' ? {
         onlyFirstTimeCustomers: !!form.value.triggerOnlyFirstTimeCustomers,
         ...(form.value.triggerMinOrderValue ? { minOrderValue: Number(form.value.triggerMinOrderValue) } : {}),
+      } : {}),
+      ...(form.value.triggerType === 'WINDOW_NO_ORDER' ? {
+        onlyNeverOrdered: !!form.value.triggerOnlyNeverOrdered,
       } : {}),
     }
   }
@@ -682,6 +687,18 @@ async function activate() {
                 <input id="trg_firsttime" v-model="form.triggerOnlyFirstTimeCustomers" type="checkbox" class="form-check-input" />
                 <label for="trg_firsttime" class="form-check-label">Apenas clientes de primeira viagem</label>
               </div>
+            </div>
+          </div>
+
+          <div v-if="form.triggerType === 'WINDOW_NO_ORDER'" class="mb-3">
+            <div class="form-check">
+              <input id="trg_neverordered" v-model="form.triggerOnlyNeverOrdered" type="checkbox" class="form-check-input" />
+              <label for="trg_neverordered" class="form-check-label">
+                Apenas leads que <strong>nunca compraram</strong>
+              </label>
+              <small class="form-text d-block">
+                Exclui qualquer cliente que já tenha feito ao menos um pedido na empresa, em qualquer data.
+              </small>
             </div>
           </div>
 

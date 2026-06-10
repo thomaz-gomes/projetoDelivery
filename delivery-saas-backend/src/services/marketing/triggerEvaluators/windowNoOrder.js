@@ -16,6 +16,11 @@ export async function evaluateWindowNoOrder({ campaign, now = new Date() }) {
   const delayMinutes = Number(params.delayMinutes ?? 30)
   const maxAgeHours = Math.min(Number(params.maxAgeHours ?? 23), 23.5) // margem pra janela 24h
   const onlyMenuId = params.menuId || null
+  // Quando ligado, exclui qualquer cliente que JÁ tenha feito pedido na empresa
+  // em qualquer momento — usado pra campanhas focadas em leads que nunca
+  // converteram. Diferente de `onlyFirstTimeCustomers` do WINDOW_WITH_ORDER,
+  // que aceita o primeiro pedido (count === 1).
+  const onlyNeverOrdered = !!params.onlyNeverOrdered
 
   const earliestInbound = new Date(now.getTime() - maxAgeHours * 60 * 60 * 1000)
   const latestInbound = new Date(now.getTime() - delayMinutes * 60 * 1000)
@@ -57,6 +62,19 @@ export async function evaluateWindowNoOrder({ campaign, now = new Date() }) {
   const customerIds = conversations.map(c => c.customerId).filter(Boolean)
   if (customerIds.length === 0) return []
 
+  // onlyNeverOrdered: descarta de cara qualquer customer que tenha QUALQUER
+  // pedido na empresa (independente da data). Roda antes dos demais filtros
+  // pra economizar trabalho subsequente.
+  let everOrderedSet = null
+  if (onlyNeverOrdered) {
+    const counts = await prisma.order.groupBy({
+      by: ['customerId'],
+      where: { companyId: campaign.companyId, customerId: { in: customerIds } },
+      _count: { _all: true },
+    })
+    everOrderedSet = new Set(counts.filter(c => c._count._all > 0).map(c => c.customerId))
+  }
+
   // Pedidos criados após o inbound desses customers.
   const recentOrders = await prisma.order.findMany({
     where: {
@@ -97,7 +115,8 @@ export async function evaluateWindowNoOrder({ campaign, now = new Date() }) {
   // Filtra qualificadas
   const qualified = conversations.filter(conv =>
     !customersWithRecentOrder.has(conv.customerId) &&
-    !alreadyMessaged.has(conv.customerId)
+    !alreadyMessaged.has(conv.customerId) &&
+    (!everOrderedSet || !everOrderedSet.has(conv.customerId))
   )
 
   return qualified.map(conv => ({
