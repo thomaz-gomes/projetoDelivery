@@ -325,50 +325,87 @@ router.post('/generate', requireRole('ADMIN'), async (req, res) => {
 
     const apiKey = await getGoogleAIKey()
 
-    // Monta as partes de imagem (ordem fixa) + legenda explicando o papel de cada uma.
-    // O Nano Banana aceita múltiplas imagens de entrada para edição/composição.
+    // Imagens enviadas ao modelo de geração: PRODUTO e CENÁRIO vão como imagem (o modelo precisa
+    // "ver" o produto a manter fiel e o ambiente alvo). A REFERÊNCIA NÃO é enviada como imagem —
+    // extraímos apenas o ESTILO dela em texto (via Vision). Enviar a referência como imagem faria o
+    // modelo copiar a comida/composição dela; e, com o produto presente, ele tende a só replicar a foto.
     const imageParts = []
     const legendLines = []
     if (productImg) {
       imageParts.push({ inlineData: productImg })
-      legendLines.push(`- Image ${imageParts.length} (PRODUCT): the EXACT product to feature. Reproduce it with TOTAL fidelity — identical ingredients, toppings, textures, colors and proportions. NEVER add, remove, swap or invent ingredients. This image is the only source of truth for the food itself.`)
-    }
-    if (referenceImg) {
-      imageParts.push({ inlineData: referenceImg })
-      legendLines.push(`- Image ${imageParts.length} (STYLE REFERENCE): use ONLY as inspiration for the photographic style — lighting, color grading, mood, composition and camera treatment. Do NOT copy its food, ingredients or props into the result.`)
+      legendLines.push(`- Image ${imageParts.length} (PRODUCT): the exact food item to feature. Keep ONLY the food faithful — same ingredients, toppings, textures, colors and proportions; never add, remove, swap or invent ingredients.`)
     }
     if (sceneImg) {
       imageParts.push({ inlineData: sceneImg })
-      legendLines.push(`- Image ${imageParts.length} (SCENE): the real environment/table where the product must be placed. Preserve this background, surface and setting, and composite the product into it naturally.`)
+      legendLines.push(`- Image ${imageParts.length} (SCENE): the real environment/table where the product must be placed. Keep this background, surface and setting.`)
     }
 
-    // ── Com imagens: prompt multi-imagem (produto + referência + cenário) ──
+    // Extrai o ESTILO fotográfico da referência (iluminação, cor, clima, composição) como texto.
+    let refStyleText = ''
+    if (referenceImg) {
+      const styleRes = await fetchWithRetry(
+        `${GOOGLE_AI_BASE}/models/${GEMINI_TEXT_MODEL}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { inlineData: referenceImg },
+                {
+                  text:
+                    `You are a food photography art director. Describe ONLY the PHOTOGRAPHIC STYLE of this image ` +
+                    `so it can be reused on a COMPLETELY DIFFERENT dish.\n` +
+                    `Cover: lighting (direction, hardness, color temperature), color grading and mood, ` +
+                    `background and surface, prop styling, camera angle and depth of field.\n` +
+                    `Do NOT describe the specific food, ingredients or dish shown. ` +
+                    `Output a single concise comma-separated description in English, nothing else.`,
+                },
+              ],
+            }],
+            generationConfig: { maxOutputTokens: 512, temperature: 0.2, thinkingConfig: { thinkingBudget: 0 } },
+          }),
+          signal: AbortSignal.timeout(30_000),
+        },
+        { label: 'reference style analysis' }
+      )
+      if (styleRes.ok) {
+        const styleData = await styleRes.json()
+        refStyleText = styleData.candidates?.[0]?.content?.parts?.find(p => p.text)?.text?.trim() || ''
+        console.log('[AI Studio] generate: reference style:', refStyleText.slice(0, 200))
+      } else {
+        console.warn('[AI Studio] generate: reference style analysis failed (%s)', styleRes.status)
+      }
+    }
+
+    // ── Com imagens: re-fotografa o produto numa cena/estilo NOVOS (não copia a foto original) ──
     // ── Sem imagens: geração direta por descrição (prompt fotorrealista consagrado) ──
     let imagenPrompt
     if (hasImages) {
       const lines = []
-      lines.push('You are a professional food photographer creating high-end, realistic food photography for a delivery app.')
-      lines.push('INPUT IMAGES:\n' + legendLines.join('\n'))
+      lines.push('You are a professional food photographer. Produce a brand-new, professionally styled food photograph.')
+      if (legendLines.length) lines.push('INPUT IMAGES:\n' + legendLines.join('\n'))
       if (productImg) {
-        lines.push('Reproduce the PRODUCT from its image with total fidelity. The food must look IDENTICAL to the product image.')
+        lines.push('PRODUCT FIDELITY: keep ONLY the food item itself exactly as in the PRODUCT image — same ingredients, toppings, textures, colors and proportions; never add, remove, swap or invent ingredients.')
+        lines.push("IMPORTANT: do NOT reuse the PRODUCT image's original background, surface, props, packaging, framing or lighting — replace them entirely with the new scene/style described below. The final image MUST look clearly different from the original product photo, not a copy of it.")
       } else if (descTrimmed) {
         lines.push(`SUBJECT: ${descTrimmed}.`)
       }
       if (descTrimmed) {
         lines.push(`ADDITIONAL INSTRUCTIONS (follow literally; apply ONLY what is explicitly stated here and do NOT invent ingredients, props, people or elements that are not described here or visible in the input images): ${descTrimmed}.`)
       }
-      if (referenceImg) {
-        lines.push('Match the photographic STYLE of the STYLE REFERENCE image (lighting, color grading, mood, composition) without copying its food or props.')
-      } else {
-        lines.push(`LIGHTING AND SURFACE: ${STYLE_PROMPTS[style]}.`)
-      }
       if (sceneImg) {
-        lines.push('Place the product naturally into the SCENE image, keeping that environment, surface and background realistic and consistent.')
-      } else {
+        lines.push('TARGET SCENE: place the food naturally into the environment shown in the SCENE image, preserving its background, surface and setting with realistic shadows and contact.')
+      }
+      if (referenceImg) {
+        lines.push(`TARGET STYLE — recreate this photographic style${sceneImg ? ' (lighting, color grading and mood)' : ' for lighting, color grading, mood, background, surface and composition'}: ${refStyleText || 'cinematic high-end food photography with dramatic directional light and rich color grading'}.`)
+      }
+      if (!sceneImg && !referenceImg) {
+        lines.push(`LIGHTING AND SURFACE: ${STYLE_PROMPTS[style]}.`)
         lines.push(`CAMERA: ${ANGLE_PROMPTS[angle]}.`)
       }
       lines.push(`IMAGE FORMAT: ${RATIO_PROMPTS[safeRatio]}. The output image MUST be in ${safeRatio} aspect ratio.`)
-      lines.push('Realistic DSLR photograph, natural textures, realistic shadows and highlights, shallow depth of field. Not digital art, not CGI, not illustration, no watermarks, no text.')
+      lines.push('Realistic DSLR photograph, natural textures, realistic shadows and highlights, shallow depth of field. Remove any readable text, labels or logos from the product and packaging. Not digital art, not CGI, not illustration, no watermarks, no text.')
       imagenPrompt = lines.join('\n\n')
     } else {
       imagenPrompt =
@@ -392,13 +429,16 @@ router.post('/generate', requireRole('ADMIN'), async (req, res) => {
     const slug = (descTrimmed || (productImg ? 'produto' : 'imagem')).slice(0, 40).replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').toLowerCase()
 
     const genOne = async (index) => {
+      const variationNote = qty > 1
+        ? `\n\nVARIATION ${index + 1} of ${qty}: use a noticeably different camera angle, composition and prop arrangement from the other variations, while keeping the same product and the same overall style.`
+        : ''
       const imageGenRes = await fetchWithRetry(
         `${GOOGLE_AI_BASE}/models/${IMAGEN_MODEL}:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ parts: [...imageParts, { text: imagenPrompt }] }],
+            contents: [{ parts: [...imageParts, { text: imagenPrompt + variationNote }] }],
             generationConfig: {
               responseModalities: ['IMAGE'],
               imageConfig: { aspectRatio: safeRatio },
