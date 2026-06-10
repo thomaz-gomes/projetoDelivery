@@ -343,7 +343,10 @@ router.post('/generate', requireRole('ADMIN'), async (req, res) => {
       legendLines.push(`- Image ${imageParts.length} (SCENE): the real environment/table where the product must be placed. Keep this background, surface and setting.`)
     }
 
-    // Extrai o ESTILO fotográfico da referência (iluminação, cor, clima, composição) como texto.
+    // Extrai o ESTILO fotográfico da referência em CAMPOS ESTRUTURADOS (JSON), nunca texto livre.
+    // Texto livre vazava o prato/composição da referência e o modelo acabava recriando a referência
+    // em vez de reestilizar o produto. Com campos estritos (luz/cor/clima/superfície/DOF) o conteúdo
+    // (comida, objetos, arranjo) não tem como vazar para o gerador.
     let refStyleText = ''
     if (referenceImg) {
       const styleRes = await fetchWithRetry(
@@ -357,16 +360,30 @@ router.post('/generate', requireRole('ADMIN'), async (req, res) => {
                 { inlineData: referenceImg },
                 {
                   text:
-                    `You are a food photography art director. Describe ONLY the PHOTOGRAPHIC STYLE of this image ` +
-                    `so it can be reused on a COMPLETELY DIFFERENT dish.\n` +
-                    `Cover: lighting (direction, hardness, color temperature), color grading and mood, ` +
-                    `background and surface, prop styling, camera angle and depth of field.\n` +
-                    `Do NOT describe the specific food, ingredients or dish shown. ` +
-                    `Output a single concise comma-separated description in English, nothing else.`,
+                    `Look at this photo and extract ONLY its abstract photographic STYLE — never the subject.\n` +
+                    `Fill each field briefly (a few words). ABSOLUTELY DO NOT name or describe any food, dish, ` +
+                    `ingredient, drink, object, prop, person, brand, text, or the specific arrangement/composition. ` +
+                    `Describe surfaces/backgrounds only by generic material and color (e.g. "dark matte slate", "warm wood").`,
                 },
               ],
             }],
-            generationConfig: { maxOutputTokens: 512, temperature: 0.2, thinkingConfig: { thinkingBudget: 0 } },
+            generationConfig: {
+              maxOutputTokens: 512,
+              temperature: 0.2,
+              thinkingConfig: { thinkingBudget: 0 },
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: 'OBJECT',
+                properties: {
+                  lighting: { type: 'STRING', description: 'Light direction, hardness, color temperature' },
+                  colorGrading: { type: 'STRING', description: 'Palette, saturation, contrast, tone' },
+                  mood: { type: 'STRING', description: 'Overall mood/atmosphere in a few words' },
+                  surface: { type: 'STRING', description: 'Generic background/surface material and color only' },
+                  depthOfField: { type: 'STRING', description: 'Focus depth / bokeh' },
+                },
+                required: ['lighting', 'colorGrading', 'mood'],
+              },
+            },
           }),
           signal: AbortSignal.timeout(30_000),
         },
@@ -374,7 +391,19 @@ router.post('/generate', requireRole('ADMIN'), async (req, res) => {
       )
       if (styleRes.ok) {
         const styleData = await styleRes.json()
-        refStyleText = styleData.candidates?.[0]?.content?.parts?.find(p => p.text)?.text?.trim() || ''
+        const raw = styleData.candidates?.[0]?.content?.parts?.find(p => p.text)?.text?.trim() || ''
+        try {
+          const s = JSON.parse(raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim())
+          refStyleText = [
+            s.lighting && `lighting: ${s.lighting}`,
+            s.colorGrading && `color grading: ${s.colorGrading}`,
+            s.mood && `mood: ${s.mood}`,
+            s.surface && `background/surface: ${s.surface}`,
+            s.depthOfField && `depth of field: ${s.depthOfField}`,
+          ].filter(Boolean).join('; ')
+        } catch {
+          console.warn('[AI Studio] generate: could not parse reference style JSON:', raw.slice(0, 200))
+        }
         console.log('[AI Studio] generate: reference style:', refStyleText.slice(0, 200))
       } else {
         console.warn('[AI Studio] generate: reference style analysis failed (%s)', styleRes.status)
@@ -389,7 +418,7 @@ router.post('/generate', requireRole('ADMIN'), async (req, res) => {
       lines.push('You are a professional food photographer. Produce a brand-new, professionally styled food photograph.')
       if (legendLines.length) lines.push('INPUT IMAGES:\n' + legendLines.join('\n'))
       if (productImg) {
-        lines.push('PRODUCT FIDELITY: keep ONLY the food item itself exactly as in the PRODUCT image — same ingredients, toppings, textures, colors and proportions; never add, remove, swap or invent ingredients.')
+        lines.push('SUBJECT: the food shown in the PRODUCT image is the ONLY subject. Keep it exactly faithful — same ingredients, toppings, textures, colors and proportions; never add, remove, swap or invent ingredients, and never introduce any other dish or food.')
         lines.push("IMPORTANT: do NOT reuse the PRODUCT image's original background, surface, props, packaging, framing or lighting — replace them entirely with the new scene/style described below. The final image MUST look clearly different from the original product photo, not a copy of it.")
       } else if (descTrimmed) {
         lines.push(`SUBJECT: ${descTrimmed}.`)
@@ -401,7 +430,7 @@ router.post('/generate', requireRole('ADMIN'), async (req, res) => {
         lines.push('TARGET SCENE: place the food naturally into the environment shown in the SCENE image, preserving its background, surface and setting with realistic shadows and contact.')
       }
       if (referenceImg) {
-        lines.push(`TARGET STYLE — recreate this photographic style${sceneImg ? ' (lighting, color grading and mood)' : ' for lighting, color grading, mood, background, surface and composition'}: ${refStyleText || 'cinematic high-end food photography with dramatic directional light and rich color grading'}.`)
+        lines.push(`TARGET STYLE — apply ONLY this abstract photographic treatment to the SUBJECT above. This describes lighting/color/mood/surface, NOT a dish: do NOT recreate, add or imply any food, object or composition from it. Style: ${refStyleText || 'dramatic directional lighting, rich warm color grading, moody atmosphere, dark matte surface, shallow depth of field'}.`)
       }
       if (!sceneImg && !referenceImg) {
         lines.push(`LIGHTING AND SURFACE: ${STYLE_PROMPTS[styleForPrompt]}.`)
