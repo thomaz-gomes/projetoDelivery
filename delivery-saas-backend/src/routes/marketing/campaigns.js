@@ -450,8 +450,12 @@ router.patch('/:id', requireRole('ADMIN'), async (req, res) => {
 async function computePreflight(campaign, companyId) {
   const issues = []
 
-  // 1. Cloud template check
-  const cloudish = campaign.channel === 'META_WA' || (campaign.channel === 'AUTO' && campaign.templateId)
+  // 1. Cloud template check — TRIGGER campaigns dispatch within the 24h
+  // window with free text (no template needed); skip the gate for them.
+  const isTrigger = campaign.scheduleType === 'TRIGGER'
+  const cloudish = !isTrigger && (
+    campaign.channel === 'META_WA' || (campaign.channel === 'AUTO' && campaign.templateId)
+  )
   if (cloudish) {
     if (!campaign.templateId) {
       issues.push({ severity: 'error', code: 'no_template', msg: 'Template não selecionado' })
@@ -473,6 +477,11 @@ async function computePreflight(campaign, companyId) {
     // on create, but the campaign may have been edited).
     if (!campaign.triggerType) {
       issues.push({ severity: 'error', code: 'no_trigger_type', msg: 'Tipo de gatilho não definido' })
+    }
+    // TRIGGER dispatches within the 24h window using freeText — without it
+    // the sender would attempt to send an empty body and the provider rejects.
+    if (!campaign.freeText || !campaign.freeText.trim()) {
+      issues.push({ severity: 'error', code: 'no_message_body', msg: 'Mensagem (texto livre) não definida' })
     }
     // No empty-audience gate — trigger sweep decides at runtime.
     return { eligible, issues }
