@@ -31,7 +31,7 @@
       </li>
       <li class="nav-item">
         <a class="nav-link" :class="{ active: tab === 'pack' }" href="#" @click.prevent="tab = 'pack'">
-          <i class="bi bi-grid-3x3-gap me-1"></i>Pack Social
+          <i class="bi bi-grid-3x3-gap me-1"></i>Rede Social
         </a>
       </li>
       <li class="nav-item">
@@ -52,10 +52,38 @@
       <div v-if="tab === 'create'" class="studio-ia-panel">
         <div class="row g-4">
           <div class="col-12 col-lg-5">
-            <!-- Imagem de referencia (opcional) -->
+            <!-- Produto: foto real do produto (opcional) -->
             <div class="mb-3">
               <label class="form-label small fw-semibold">
-                <i class="bi bi-image me-1"></i>Imagem de referencia <span class="fw-normal text-muted">(opcional)</span>
+                <i class="bi bi-box-seam me-1"></i>Produto <span class="fw-normal text-muted">(opcional)</span>
+              </label>
+              <div
+                class="sia-ref-dropzone"
+                :class="{ 'drag-over': productDragOver }"
+                @click="$refs.productFileInput.click()"
+                @dragover.prevent="productDragOver = true"
+                @dragleave.prevent="productDragOver = false"
+                @drop.prevent="onSlotDrop($event, productSlot)"
+              >
+                <div v-if="genProductPreview" class="sia-ref-preview">
+                  <img :src="genProductPreview" alt="Produto" />
+                  <button type="button" class="btn btn-sm btn-outline-danger sia-ref-clear" @click.stop="clearSlot(productSlot)">
+                    <i class="bi bi-x-lg"></i>
+                  </button>
+                </div>
+                <template v-else>
+                  <i class="bi bi-box-seam" style="font-size:1.5rem;opacity:.35"></i>
+                  <span class="small text-muted mt-1">Arraste ou clique para enviar a foto do produto</span>
+                </template>
+              </div>
+              <div class="form-text">A IA reconhece os ingredientes e mantem fidelidade total ao produto, sem inventar itens</div>
+              <input ref="productFileInput" type="file" accept="image/jpeg,image/png,image/webp" style="display:none" @change="onSlotChange($event, productSlot)" />
+            </div>
+
+            <!-- Referencia: estilo / iluminacao (opcional) -->
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">
+                <i class="bi bi-image me-1"></i>Referencia <span class="fw-normal text-muted">(opcional)</span>
               </label>
               <div
                 class="sia-ref-dropzone"
@@ -63,36 +91,82 @@
                 @click="$refs.refFileInput.click()"
                 @dragover.prevent="refDragOver = true"
                 @dragleave.prevent="refDragOver = false"
-                @drop.prevent="onRefDrop"
+                @drop.prevent="onSlotDrop($event, refSlot)"
               >
                 <div v-if="genRefPreview" class="sia-ref-preview">
                   <img :src="genRefPreview" alt="Referencia" />
-                  <button type="button" class="btn btn-sm btn-outline-danger sia-ref-clear" @click.stop="clearGenRef">
+                  <button type="button" class="btn btn-sm btn-outline-danger sia-ref-clear" @click.stop="clearSlot(refSlot)">
                     <i class="bi bi-x-lg"></i>
                   </button>
                 </div>
                 <template v-else>
                   <i class="bi bi-image-alt" style="font-size:1.5rem;opacity:.35"></i>
-                  <span class="small text-muted mt-1">Arraste ou clique para enviar uma foto de referencia</span>
+                  <span class="small text-muted mt-1">Arraste ou clique para enviar uma referencia</span>
                 </template>
               </div>
-              <div class="form-text">A IA usara esta foto como base para gerar a imagem no estilo escolhido</div>
-              <input ref="refFileInput" type="file" accept="image/jpeg,image/png,image/webp" style="display:none" @change="onRefFileChange" />
+              <div class="form-text">A IA copia apenas o estilo: iluminacao, cores, clima e composicao — nao os ingredientes</div>
+              <input ref="refFileInput" type="file" accept="image/jpeg,image/png,image/webp" style="display:none" @change="onSlotChange($event, refSlot)" />
             </div>
 
-            <!-- Descricao -->
+            <!-- Cenario: foto da cena/mesa (opcional) -->
             <div class="mb-3">
               <label class="form-label small fw-semibold">
-                <i class="bi bi-pencil me-1"></i>Descreva a imagem
+                <i class="bi bi-easel me-1"></i>Cenario <span class="fw-normal text-muted">(opcional)</span>
+              </label>
+              <div
+                class="sia-ref-dropzone"
+                :class="{ 'drag-over': sceneDragOver }"
+                @click="$refs.sceneFileInput.click()"
+                @dragover.prevent="sceneDragOver = true"
+                @dragleave.prevent="sceneDragOver = false"
+                @drop.prevent="onSlotDrop($event, sceneSlot)"
+              >
+                <div v-if="genScenePreview" class="sia-ref-preview">
+                  <img :src="genScenePreview" alt="Cenario" />
+                  <button type="button" class="btn btn-sm btn-outline-danger sia-ref-clear" @click.stop="clearSlot(sceneSlot)">
+                    <i class="bi bi-x-lg"></i>
+                  </button>
+                </div>
+                <template v-else>
+                  <i class="bi bi-easel" style="font-size:1.5rem;opacity:.35"></i>
+                  <span class="small text-muted mt-1">Arraste ou clique para enviar a cena</span>
+                </template>
+              </div>
+              <div class="form-text">Foto da cena onde o produto sera aplicado (ex: a propria mesa do restaurante)</div>
+              <input ref="sceneFileInput" type="file" accept="image/jpeg,image/png,image/webp" style="display:none" @change="onSlotChange($event, sceneSlot)" />
+            </div>
+
+            <!-- Informacoes adicionais -->
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">
+                <i class="bi bi-pencil me-1"></i>Informacoes adicionais <span class="fw-normal text-muted">(opcional)</span>
               </label>
               <textarea
                 class="form-control"
                 rows="3"
                 v-model="genDescription"
                 :disabled="genLoading"
-                placeholder="Ex: Pizza margherita com queijo mozzarella derretido e manjericao fresco sobre molho de tomate artesanal, borda dourada e crocante"
+                placeholder="Ex: Inclua pessoas na cena junto com o produto"
               ></textarea>
-              <div class="form-text">{{ genRefFile ? 'Descreva o que deseja manter ou alterar na imagem de referencia' : 'Descreva ingredientes, textura e aparencia do prato com detalhes' }}</div>
+              <div class="form-text">Informacoes extras para o prompt. Descreva apenas o que deve aparecer — a IA nao inventa itens que voce nao citar.</div>
+            </div>
+
+            <!-- Quantidade -->
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">
+                <i class="bi bi-collection me-1"></i>Quantidade de imagens
+              </label>
+              <div class="sia-qty-grid">
+                <label
+                  v-for="n in 3"
+                  :key="n"
+                  :class="['sia-qty-card', { active: genQuantity === n }]"
+                >
+                  <input type="radio" :value="n" v-model="genQuantity" class="d-none" :disabled="genLoading" />
+                  <span class="sia-qty-number">{{ n }}</span>
+                  <span class="sia-qty-cost">{{ n * (creditCost ?? 10) }} cred.</span>
+                </label>
+              </div>
             </div>
 
             <!-- Estilo -->
@@ -164,37 +238,57 @@
              <!-- Gerar -->
             <div class="d-flex align-items-center gap-2 flex-wrap mb-4">
               <span class="badge bg-warning text-dark px-3 py-2">
-                <i class="bi bi-lightning-charge-fill me-1"></i>Custo: <strong>{{ creditCost ?? '...' }}</strong> creditos
+                <i class="bi bi-lightning-charge-fill me-1"></i>Custo: <strong>{{ creditCost != null ? creditCost * genQuantity : '...' }}</strong> creditos
               </span>
               <button
                 type="button"
                 class="btn btn-warning fw-bold ms-auto"
-                :disabled="!genDescription.trim() || genLoading"
+                :disabled="(!genDescription.trim() && !genProductFile) || genLoading"
                 @click="generateFromText"
               >
                 <span v-if="genLoading" class="spinner-border spinner-border-sm me-1" role="status"></span>
                 <i v-else class="bi bi-stars me-1"></i>
-                {{ genLoading ? 'Gerando...' : 'Gerar Imagem' }}
+                {{ genLoading ? 'Gerando...' : (genQuantity > 1 ? `Gerar ${genQuantity} Imagens` : 'Gerar Imagem') }}
               </button>
             </div>
             <div v-if="genLoading" class="sia-preview-placeholder">
               <div class="spinner-border text-warning" style="width:3rem;height:3rem" role="status"></div>
-              <p class="text-muted small mt-3 mb-0">Gerando imagem com IA...<br>Isso pode levar ate 2 minutos.</p>
+              <p class="text-muted small mt-3 mb-0">Gerando {{ genQuantity > 1 ? `${genQuantity} imagens` : 'imagem' }} com IA...<br>Isso pode levar ate 2 minutos.</p>
             </div>
-            <div v-else-if="genResult" class="sia-preview-result">
-              <img :src="assetUrl(genResult.url)" :alt="genResult.filename" class="sia-preview-img" />
-              <div class="sia-preview-actions">
-                <button class="btn btn-outline-secondary btn-sm" @click="downloadMedia(genResult)">
-                  <i class="bi bi-download me-1"></i>Download
+            <div v-else-if="genResults.length" class="sia-preview-result">
+              <div class="sia-pack-grid" :class="{ 'pack-single': genResults.length === 1 }">
+                <div
+                  v-for="(item, idx) in genResults"
+                  :key="item.id || idx"
+                  class="sia-pack-item"
+                >
+                  <img :src="assetUrl(item.url)" :alt="item.filename" />
+                  <div class="sia-pack-item-overlay">
+                    <button class="btn btn-sm btn-light" @click="downloadMedia(item)" title="Download">
+                      <i class="bi bi-download"></i>
+                    </button>
+                  </div>
+                  <span class="sia-pack-badge">{{ idx + 1 }}</span>
+                  <MediaFeedbackButtons
+                    v-if="item.id"
+                    :media-id="item.id"
+                    :existing-feedbacks="[]"
+                    @deleted="removeGenResult"
+                  />
+                </div>
+              </div>
+              <div class="sia-preview-actions mt-3">
+                <button class="btn btn-outline-secondary btn-sm" @click="downloadAllGen">
+                  <i class="bi bi-download me-1"></i>{{ genResults.length > 1 ? 'Baixar todas' : 'Download' }}
                 </button>
-                <button class="btn btn-link btn-sm text-muted" @click="genResult = null">
+                <button class="btn btn-link btn-sm text-muted" @click="genResults = []">
                   <i class="bi bi-arrow-counterclockwise me-1"></i>Gerar outra
                 </button>
               </div>
             </div>
             <div v-else class="sia-preview-placeholder">
               <i class="bi bi-image" style="font-size:3rem;opacity:.2"></i>
-              <p class="text-muted small mt-2 mb-0">A imagem gerada aparecera aqui</p>
+              <p class="text-muted small mt-2 mb-0">{{ genQuantity > 1 ? 'As imagens geradas aparecerao aqui' : 'A imagem gerada aparecera aqui' }}</p>
             </div>
           </div>
         </div>
@@ -240,13 +334,13 @@
               </label>
               <div class="sia-qty-grid">
                 <label
-                  v-for="n in 5"
+                  v-for="n in 3"
                   :key="n"
                   :class="['sia-qty-card', { active: packQuantity === n }]"
                 >
                   <input type="radio" :value="n" v-model="packQuantity" class="d-none" :disabled="packLoading" />
                   <span class="sia-qty-number">{{ n }}</span>
-                  <span class="sia-qty-cost">{{ n }} cred.</span>
+                  <span class="sia-qty-cost">{{ n * (creditCost ?? 10) }} cred.</span>
                 </label>
               </div>
             </div>
@@ -295,7 +389,7 @@
           <div class="col-12 col-lg-7">
             <div class="d-flex align-items-center gap-2 flex-wrap mb-4">
               <span class="badge bg-warning text-dark px-3 py-2">
-                <i class="bi bi-lightning-charge-fill me-1"></i>Custo: <strong>{{ packQuantity }}</strong> creditos
+                <i class="bi bi-lightning-charge-fill me-1"></i>Custo: <strong>{{ packQuantity * (creditCost ?? 10) }}</strong> creditos
               </span>
               <button
                 type="button"
@@ -651,12 +745,29 @@ const genStyle = ref('minimal')
 const genAngle = ref('standard')
 const genLoading = ref(false)
 const genError = ref(null)
-const genResult = ref(null)
+const genResults = ref([])
 const genRatio = ref('1:1')
+const genQuantity = ref(1)
+// Produto (fidelidade total ao produto)
+const genProductFile = ref(null)
+const genProductPreview = ref(null)
+const genProductBase64 = ref(null)
+const productDragOver = ref(false)
+// Referencia (estilo / iluminacao)
 const genRefFile = ref(null)
 const genRefPreview = ref(null)
 const genRefBase64 = ref(null)
 const refDragOver = ref(false)
+// Cenario (cena/mesa onde aplicar o produto)
+const genSceneFile = ref(null)
+const genScenePreview = ref(null)
+const genSceneBase64 = ref(null)
+const sceneDragOver = ref(false)
+
+// Slots de imagem da aba "Criar do Zero" (usados pelos handlers genéricos abaixo)
+const productSlot = { fileRef: genProductFile, previewRef: genProductPreview, base64Ref: genProductBase64, errorRef: genError, label: 'produto' }
+const refSlot     = { fileRef: genRefFile, previewRef: genRefPreview, base64Ref: genRefBase64, errorRef: genError, label: 'referencia' }
+const sceneSlot   = { fileRef: genSceneFile, previewRef: genScenePreview, base64Ref: genSceneBase64, errorRef: genError, label: 'cenario' }
 
 // Pack Social tab
 const packFile = ref(null)
@@ -753,40 +864,43 @@ async function refreshLessons() {
   }
 }
 
-// ── Reference image (create tab) ──
-function onRefFileChange(e) {
-  const f = e.target.files?.[0]
-  if (f) stageRefFile(f)
-  try { e.target.value = '' } catch {}
-}
-
-function onRefDrop(e) {
-  refDragOver.value = false
-  const f = e.dataTransfer?.files?.[0]
-  if (f) stageRefFile(f)
-}
-
-function stageRefFile(file) {
-  if (!file.type.startsWith('image/')) return
-  if (file.size > 5 * 1024 * 1024) {
-    genError.value = 'Imagem de referencia muito grande. Maximo: 5 MB.'
+// ── Imagens da aba "Criar do Zero" (produto, referencia, cenario) ──
+// Handlers genéricos parametrizados por slot ({ fileRef, previewRef, base64Ref, errorRef, label }).
+function stageImageSlot(file, slot) {
+  if (!file.type.startsWith('image/')) {
+    slot.errorRef.value = 'Formato invalido. Use JPG, PNG ou WebP.'
     return
   }
-  genRefFile.value = file
-  if (genRefPreview.value) URL.revokeObjectURL(genRefPreview.value)
-  genRefPreview.value = URL.createObjectURL(file)
-  // Convert to base64
+  if (file.size > 5 * 1024 * 1024) {
+    slot.errorRef.value = `Imagem de ${slot.label} muito grande. Maximo: 5 MB.`
+    return
+  }
+  slot.errorRef.value = null
+  slot.fileRef.value = file
+  if (slot.previewRef.value) URL.revokeObjectURL(slot.previewRef.value)
+  slot.previewRef.value = URL.createObjectURL(file)
   const reader = new FileReader()
-  reader.onload = () => { genRefBase64.value = reader.result }
+  reader.onload = () => { slot.base64Ref.value = reader.result }
   reader.readAsDataURL(file)
 }
 
-function clearGenRef() {
-  genRefFile.value = null
-  genRefBase64.value = null
-  if (genRefPreview.value) {
-    URL.revokeObjectURL(genRefPreview.value)
-    genRefPreview.value = null
+function onSlotChange(e, slot) {
+  const f = e.target.files?.[0]
+  if (f) stageImageSlot(f, slot)
+  try { e.target.value = '' } catch {}
+}
+
+function onSlotDrop(e, slot) {
+  const f = e.dataTransfer?.files?.[0]
+  if (f) stageImageSlot(f, slot)
+}
+
+function clearSlot(slot) {
+  slot.fileRef.value = null
+  slot.base64Ref.value = null
+  if (slot.previewRef.value) {
+    URL.revokeObjectURL(slot.previewRef.value)
+    slot.previewRef.value = null
   }
 }
 
@@ -872,10 +986,10 @@ function removePackResult(mediaId) {
   loadGallery()
 }
 
-// ── Generate from text (+ optional reference) ──
+// ── Generate from text (+ optional product / reference / scene images) ──
 async function generateFromText() {
   genError.value = null
-  genResult.value = null
+  genResults.value = []
   genLoading.value = true
   try {
     const payload = {
@@ -883,18 +997,27 @@ async function generateFromText() {
       style: genStyle.value,
       angle: genAngle.value,
       aspectRatio: genRatio.value,
+      quantity: genQuantity.value,
     }
-    if (genRefBase64.value) {
-      payload.referenceBase64 = genRefBase64.value
-    }
+    if (genProductBase64.value) payload.productBase64 = genProductBase64.value
+    if (genRefBase64.value) payload.referenceBase64 = genRefBase64.value
+    if (genSceneBase64.value) payload.sceneBase64 = genSceneBase64.value
     const res = await api.post('/ai-studio/generate', payload, { timeout: 300000 })
-    genResult.value = res.data.media
+    genResults.value = res.data.media || []
     await refreshBalance()
   } catch (e) {
     genError.value = e?.response?.data?.message || 'Erro ao gerar imagem. Tente novamente.'
   } finally {
     genLoading.value = false
   }
+}
+
+function downloadAllGen() {
+  genResults.value.forEach(item => downloadMedia(item))
+}
+
+function removeGenResult(mediaId) {
+  genResults.value = genResults.value.filter(item => item.id !== mediaId)
 }
 
 // ── Enhance (upload + optimize) ──

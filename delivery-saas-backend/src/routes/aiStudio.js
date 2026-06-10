@@ -281,17 +281,40 @@ router.post('/enhance', requireRole('ADMIN'), async (req, res) => {
 router.post('/generate', requireRole('ADMIN'), async (req, res) => {
   const companyId = req.user.companyId
   const userId = req.user.id
-  const { description, style = 'minimal', angle = 'standard', aspectRatio = '1:1', referenceBase64 } = req.body || {}
+  const {
+    description, style = 'minimal', angle = 'standard', aspectRatio = '1:1',
+    referenceBase64, productBase64, sceneBase64, quantity = 1,
+  } = req.body || {}
 
   const descTrimmed = (description || '').trim()
-  if (descTrimmed.length < 5) return res.status(400).json({ message: 'Descrição do produto é obrigatória (mínimo 5 caracteres)' })
   const VALID_RATIOS = ['1:1', '16:9', '9:16']
   const safeRatio = VALID_RATIOS.includes(aspectRatio) ? aspectRatio : '1:1'
   if (!STYLE_PROMPTS[style]) return res.status(400).json({ message: `Estilo inválido: ${style}` })
   if (!ANGLE_PROMPTS[angle]) return res.status(400).json({ message: `Ângulo inválido: ${angle}` })
+  const qty = Math.max(1, Math.min(3, Math.floor(Number(quantity) || 1)))
+
+  // Imagens opcionais (data URI base64):
+  //   productBase64   → foto real do produto: reconhecer ingredientes e manter fidelidade total
+  //   referenceBase64 → referência apenas de estilo/iluminação/composição
+  //   sceneBase64     → cena/mesa real onde o produto deve ser aplicado
+  const VALID_IMG_MIMES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+  const parseDataUri = (b64) => {
+    if (!b64 || typeof b64 !== 'string') return null
+    const m = b64.match(/^data:(image\/\w+);base64,(.+)$/)
+    if (!m) return null
+    return { mimeType: VALID_IMG_MIMES.includes(m[1]) ? m[1] : 'image/jpeg', data: m[2] }
+  }
+  const productImg = parseDataUri(productBase64)
+  const referenceImg = parseDataUri(referenceBase64)
+  const sceneImg = parseDataUri(sceneBase64)
+  const hasImages = !!(productImg || referenceImg || sceneImg)
+
+  if (!hasImages && descTrimmed.length < 5) {
+    return res.status(400).json({ message: 'Forneça informações da imagem (mínimo 5 caracteres) ou envie a foto do produto.' })
+  }
 
   try {
-    const check = await checkCredits(companyId, 'AI_STUDIO_ENHANCE', 1)
+    const check = await checkCredits(companyId, 'AI_STUDIO_ENHANCE', qty)
     if (!check.ok) {
       return res.status(402).json({
         message: `Créditos de IA insuficientes. Necessário: ${check.totalCost}, Disponível: ${check.balance}.`,
@@ -302,86 +325,51 @@ router.post('/generate', requireRole('ADMIN'), async (req, res) => {
 
     const apiKey = await getGoogleAIKey()
 
-    // Detecta se há imagem de referência (data URI base64)
-    let refImageBuffer = null
-    let refMimeType = 'image/jpeg'
-    if (referenceBase64 && typeof referenceBase64 === 'string') {
-      const match = referenceBase64.match(/^data:(image\/\w+);base64,(.+)$/)
-      if (match) {
-        refMimeType = match[1]
-        refImageBuffer = Buffer.from(match[2], 'base64')
-      }
+    // Monta as partes de imagem (ordem fixa) + legenda explicando o papel de cada uma.
+    // O Nano Banana aceita múltiplas imagens de entrada para edição/composição.
+    const imageParts = []
+    const legendLines = []
+    if (productImg) {
+      imageParts.push({ inlineData: productImg })
+      legendLines.push(`- Image ${imageParts.length} (PRODUCT): the EXACT product to feature. Reproduce it with TOTAL fidelity — identical ingredients, toppings, textures, colors and proportions. NEVER add, remove, swap or invent ingredients. This image is the only source of truth for the food itself.`)
+    }
+    if (referenceImg) {
+      imageParts.push({ inlineData: referenceImg })
+      legendLines.push(`- Image ${imageParts.length} (STYLE REFERENCE): use ONLY as inspiration for the photographic style — lighting, color grading, mood, composition and camera treatment. Do NOT copy its food, ingredients or props into the result.`)
+    }
+    if (sceneImg) {
+      imageParts.push({ inlineData: sceneImg })
+      legendLines.push(`- Image ${imageParts.length} (SCENE): the real environment/table where the product must be placed. Preserve this background, surface and setting, and composite the product into it naturally.`)
     }
 
-    // ── Com referência: 2 etapas (Vision analisa → Imagen gera) ──
-    // ── Sem referência: geração direta por descrição ──
+    // ── Com imagens: prompt multi-imagem (produto + referência + cenário) ──
+    // ── Sem imagens: geração direta por descrição (prompt fotorrealista consagrado) ──
     let imagenPrompt
-
-    if (refImageBuffer) {
-      // ETAPA 1: Gemini Flash Vision analisa a foto e gera descrição ultra-detalhada
-      const VALID_MIMES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-      if (!VALID_MIMES.includes(refMimeType)) refMimeType = 'image/jpeg'
-      const refBase64 = refImageBuffer.toString('base64')
-
-      const visionRes = await fetchWithRetry(
-        `${GOOGLE_AI_BASE}/models/${GEMINI_TEXT_MODEL}:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { inlineData: { mimeType: refMimeType, data: refBase64 } },
-                {
-                  text:
-                    `You are a food photography expert. Analyze this food photo and output a single detailed description ` +
-                    `for an image generation model to recreate this EXACT dish.\n\n` +
-                    `DESCRIBE WITH EXTREME PRECISION:\n` +
-                    `- Exact food type (e.g. "artisanal cheeseburger", not just "burger")\n` +
-                    `- Every visible ingredient from top to bottom: bread/bun type and texture, each layer of meat (specify beef/chicken/pork), ` +
-                    `cheese type and melt level, exact lettuce variety (curly, romaine, iceberg), tomato slices, sauces, egg style (fried with runny yolk, hard yolk, etc)\n` +
-                    `- Textures: caramelized edges on meat, crispy or soft bun, melted or solid cheese\n` +
-                    `- Container/wrapper/plate if visible\n` +
-                    `- Any visible props or garnishes\n\n` +
-                    `FORMAT: Write it as a single comma-separated description in English, like a professional food photography prompt. ` +
-                    `Example: "artisanal cheeseburger with fried egg and melted cheddar, thick grilled beef patty with caramelized edges, ` +
-                    `vibrant green lettuce leaf, fluffy toasted brioche bun with smooth shiny top"\n\n` +
-                    `CRITICAL: Only describe what you ACTUALLY SEE. Do NOT invent, assume, or add ingredients not visible in the photo. ` +
-                    `If you can't identify something precisely, describe its appearance (color, shape, texture) instead of guessing.\n\n` +
-                    `Output ONLY the description, nothing else.`,
-                },
-              ],
-            }],
-            generationConfig: { maxOutputTokens: 2048, temperature: 0.1, thinkingConfig: { thinkingBudget: 0 } },
-            }),
-          signal: AbortSignal.timeout(30_000),
-        }
-      )
-
-      if (!visionRes.ok) {
-        const errText = await visionRes.text().catch(() => '')
-        throw new Error(`Vision analysis error ${visionRes.status}: ${errText.slice(0, 200)}`)
+    if (hasImages) {
+      const lines = []
+      lines.push('You are a professional food photographer creating high-end, realistic food photography for a delivery app.')
+      lines.push('INPUT IMAGES:\n' + legendLines.join('\n'))
+      if (productImg) {
+        lines.push('Reproduce the PRODUCT from its image with total fidelity. The food must look IDENTICAL to the product image.')
+      } else if (descTrimmed) {
+        lines.push(`SUBJECT: ${descTrimmed}.`)
       }
-
-      const visionData = await visionRes.json()
-      const visionParts = visionData.candidates?.[0]?.content?.parts || []
-      const foodDescription = visionParts.find(p => p.text)?.text?.trim() || ''
-      if (!foodDescription) throw new Error('Não foi possível analisar a imagem de referência')
-
-      console.log('[AI Studio] Vision description:', foodDescription.slice(0, 200))
-
-      // ETAPA 2: Monta prompt separando FOOD (da Vision) de SCENE (estilo/ângulo)
-      // A separação evita que o estilo fotográfico influencie nos ingredientes
-      imagenPrompt =
-        `FOOD (reproduce exactly, do not change any ingredient): ${foodDescription}. ` +
-        `\nSCENE DIRECTION: ${descTrimmed}. ` +
-        `\nLIGHTING AND SURFACE (affects ONLY background and light, NOT the food itself): ${STYLE_PROMPTS[style]}. ` +
-        `\nCAMERA: ${ANGLE_PROMPTS[angle]}. ` +
-        `\nIMAGE FORMAT: ${RATIO_PROMPTS[safeRatio]}. The output image MUST be in ${safeRatio} aspect ratio.\n` +
-        `\nSTYLE: realistic shadows and highlights, shallow depth of field, ` +
-        `emphasis on food textures, high-end food photography for delivery app, ` +
-        `real DSLR photograph, not digital art, not CGI, not illustration, no watermarks, no text`
-
+      if (descTrimmed) {
+        lines.push(`ADDITIONAL INSTRUCTIONS (follow literally; apply ONLY what is explicitly stated here and do NOT invent ingredients, props, people or elements that are not described here or visible in the input images): ${descTrimmed}.`)
+      }
+      if (referenceImg) {
+        lines.push('Match the photographic STYLE of the STYLE REFERENCE image (lighting, color grading, mood, composition) without copying its food or props.')
+      } else {
+        lines.push(`LIGHTING AND SURFACE: ${STYLE_PROMPTS[style]}.`)
+      }
+      if (sceneImg) {
+        lines.push('Place the product naturally into the SCENE image, keeping that environment, surface and background realistic and consistent.')
+      } else {
+        lines.push(`CAMERA: ${ANGLE_PROMPTS[angle]}.`)
+      }
+      lines.push(`IMAGE FORMAT: ${RATIO_PROMPTS[safeRatio]}. The output image MUST be in ${safeRatio} aspect ratio.`)
+      lines.push('Realistic DSLR photograph, natural textures, realistic shadows and highlights, shallow depth of field. Not digital art, not CGI, not illustration, no watermarks, no text.')
+      imagenPrompt = lines.join('\n\n')
     } else {
       imagenPrompt =
         `A real food photograph taken with a Canon EOS R5 DSLR, 100mm f/2.8 macro lens. ` +
@@ -398,63 +386,81 @@ router.post('/generate', requireRole('ADMIN'), async (req, res) => {
         `Avoid: clay or plastic appearance, artificial smoothness, fake gloss, cartoon style, neon colors, watermarks, text`
     }
 
-    const imageGenRes = await fetchWithRetry(
-      `${GOOGLE_AI_BASE}/models/${IMAGEN_MODEL}:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: imagenPrompt }] }],
-          generationConfig: {
-            responseModalities: ['IMAGE'],
-            imageConfig: { aspectRatio: safeRatio },
-          },
-        }),
-        signal: AbortSignal.timeout(120_000),
-      }
-    )
-
-    if (!imageGenRes.ok) {
-      const errText = await imageGenRes.text().catch(() => '')
-      throw new Error(`Nano Banana error ${imageGenRes.status}: ${errText.slice(0, 300)}`)
-    }
-
-    const imageGenData = await imageGenRes.json()
-    const imagePart = imageGenData.candidates?.[0]?.content?.parts?.find(p => p.inlineData)
-    const b64 = imagePart?.inlineData?.data
-    if (!b64) throw new Error('Nano Banana não retornou imagem')
-
-    const generatedBuffer = Buffer.from(b64, 'base64')
-
-    const newId = randomUUID()
+    // Gera N imagens em paralelo (quantity), persistindo cada uma na biblioteca
     const dir = path.join(process.cwd(), 'public', 'uploads', 'media', companyId)
     await fs.promises.mkdir(dir, { recursive: true })
+    const slug = (descTrimmed || (productImg ? 'produto' : 'imagem')).slice(0, 40).replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').toLowerCase()
 
-    const { optimized, thumbnail } = await optimizeForWeb(generatedBuffer)
-    const hqBuffer = await preserveHighQuality(generatedBuffer)
-    await Promise.all([
-      fs.promises.writeFile(path.join(dir, `${newId}.webp`), optimized),
-      fs.promises.writeFile(path.join(dir, `${newId}_thumb.webp`), thumbnail),
-      fs.promises.writeFile(path.join(dir, `${newId}_hq.jpg`), hqBuffer),
-    ])
-    const newUrl = `/public/uploads/media/${companyId}/${newId}.webp`
+    const genOne = async (index) => {
+      const imageGenRes = await fetchWithRetry(
+        `${GOOGLE_AI_BASE}/models/${IMAGEN_MODEL}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [...imageParts, { text: imagenPrompt }] }],
+            generationConfig: {
+              responseModalities: ['IMAGE'],
+              imageConfig: { aspectRatio: safeRatio },
+            },
+          }),
+          signal: AbortSignal.timeout(120_000),
+        },
+        { label: `generate image ${index + 1}` }
+      )
 
-    const slug = descTrimmed.slice(0, 40).replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_').toLowerCase()
-    const filename = `ai_gen_${style}_${angle}_${slug || newId.slice(0, 8)}.webp`
+      if (!imageGenRes.ok) {
+        const errText = await imageGenRes.text().catch(() => '')
+        throw new Error(`Nano Banana error (image ${index + 1}) ${imageGenRes.status}: ${errText.slice(0, 300)}`)
+      }
 
-    const resultMedia = await prisma.media.create({
-      data: { id: newId, companyId, filename, mimeType: 'image/webp', size: optimized.length, url: newUrl, aiEnhanced: true },
-    })
+      const imageGenData = await imageGenRes.json()
+      const imagePart = imageGenData.candidates?.[0]?.content?.parts?.find(p => p.inlineData)
+      const b64 = imagePart?.inlineData?.data
+      if (!b64) throw new Error(`Nano Banana não retornou imagem (image ${index + 1})`)
 
-    await debitCredits(companyId, 'AI_STUDIO_ENHANCE', 1, {
+      const generatedBuffer = Buffer.from(b64, 'base64')
+      const newId = randomUUID()
+      const { optimized, thumbnail } = await optimizeForWeb(generatedBuffer)
+      const hqBuffer = await preserveHighQuality(generatedBuffer)
+      await Promise.all([
+        fs.promises.writeFile(path.join(dir, `${newId}.webp`), optimized),
+        fs.promises.writeFile(path.join(dir, `${newId}_thumb.webp`), thumbnail),
+        fs.promises.writeFile(path.join(dir, `${newId}_hq.jpg`), hqBuffer),
+      ])
+      const newUrl = `/public/uploads/media/${companyId}/${newId}.webp`
+      const filename = `ai_gen_${style}_${angle}_${slug || newId.slice(0, 8)}_${index + 1}.webp`
+
+      return prisma.media.create({
+        data: { id: newId, companyId, filename, mimeType: 'image/webp', size: optimized.length, url: newUrl, aiEnhanced: true },
+      })
+    }
+
+    const settled = await Promise.allSettled(Array.from({ length: qty }, (_, i) => genOne(i)))
+    const mediaResults = settled.filter(r => r.status === 'fulfilled').map(r => r.value)
+    const failures = settled.filter(r => r.status === 'rejected')
+
+    if (mediaResults.length === 0) {
+      throw new Error(failures[0]?.reason?.message || 'Falha ao gerar imagem')
+    }
+    if (failures.length > 0) {
+      console.warn('[AI Studio] generate: %d/%d images failed', failures.length, qty)
+    }
+
+    await debitCredits(companyId, 'AI_STUDIO_ENHANCE', mediaResults.length, {
       type: 'generate_from_description',
       description: descTrimmed.slice(0, 200),
       style,
       angle,
-      resultMediaId: resultMedia.id,
+      quantityRequested: qty,
+      quantityGenerated: mediaResults.length,
+      usedProduct: !!productImg,
+      usedReference: !!referenceImg,
+      usedScene: !!sceneImg,
+      resultMediaIds: mediaResults.map(m => m.id),
     }, userId)
 
-    res.json({ media: resultMedia })
+    res.json({ media: mediaResults, partial: failures.length > 0 })
   } catch (e) {
     console.error('[AI Studio] Erro ao gerar imagem por descrição:', e?.message || e)
     const status = e.statusCode || 500
@@ -611,7 +617,7 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
   if (!photoBase64 || typeof photoBase64 !== 'string') {
     return res.status(400).json({ message: 'photoBase64 é obrigatório' })
   }
-  const qty = Math.max(1, Math.min(5, Math.floor(Number(quantity) || 3)))
+  const qty = Math.max(1, Math.min(3, Math.floor(Number(quantity) || 3)))
   const VALID_RATIOS = ['1:1', '16:9', '9:16']
   const safeRatio = VALID_RATIOS.includes(aspectRatio) ? aspectRatio : '1:1'
 
