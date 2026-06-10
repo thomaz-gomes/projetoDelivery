@@ -405,7 +405,8 @@ router.post('/generate', requireRole('ADMIN'), async (req, res) => {
         lines.push(`CAMERA: ${ANGLE_PROMPTS[angle]}.`)
       }
       lines.push(`IMAGE FORMAT: ${RATIO_PROMPTS[safeRatio]}. The output image MUST be in ${safeRatio} aspect ratio.`)
-      lines.push('Realistic DSLR photograph, natural textures, realistic shadows and highlights, shallow depth of field. Remove any readable text, labels or logos from the product and packaging. Not digital art, not CGI, not illustration, no watermarks, no text.')
+      lines.push('REALISM (critical): this must look like a real candid photo, NOT a flawless studio render. Embrace natural imperfections — slightly uneven plating and asymmetry, a few crumbs or sauce smears, natural grease and shine on the food, subtle condensation on cold items, minor irregular edges, real-world surface wear. Food must never look uniform or CGI-perfect.')
+      lines.push('Realistic DSLR photograph with authentic textures, natural color rendition and subtle film grain, realistic shadows and highlights, shallow depth of field. Remove any readable text, labels or logos from the product and packaging. Avoid: clay or plastic appearance, waxy or glossy artificial surfaces, over-smoothing, perfect symmetry, CGI, 3D render, illustration, digital art, watermarks, text.')
       imagenPrompt = lines.join('\n\n')
     } else {
       imagenPrompt =
@@ -867,7 +868,8 @@ router.post('/generate-pack', requireRole('ADMIN'), async (req, res) => {
         `- The food/product must look IDENTICAL to the attached photo — do not add, remove, or change any ingredient\n` +
         `- Apply ONLY the scene concept described above (background, lighting, props, human interaction)\n` +
         `- REMOVE any visible text, labels, logos, or brand names from the product and packaging — the result must have NO readable text anywhere\n` +
-        `- Realistic DSLR photograph, natural textures, no CGI, no illustration, no watermarks, no text`
+        `- REALISM (critical): a real candid photo, NOT a flawless studio render. Embrace natural imperfections — slightly uneven plating, a few crumbs or sauce smears, natural grease and shine, subtle condensation on cold items, minor irregular edges. Food must never look uniform or CGI-perfect\n` +
+        `- Realistic DSLR photograph with authentic textures, natural color and subtle film grain, realistic shadows. Avoid: clay or plastic appearance, waxy artificial gloss, over-smoothing, perfect symmetry, CGI, 3D render, illustration, watermarks, text`
 
       const imageGenRes = await fetchWithRetry(
         `${GOOGLE_AI_BASE}/models/${IMAGEN_MODEL}:generateContent?key=${apiKey}`,
