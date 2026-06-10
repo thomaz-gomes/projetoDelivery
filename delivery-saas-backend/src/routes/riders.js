@@ -1415,7 +1415,12 @@ ridersRouter.post('/:id/account/adjust', requireRole('ADMIN'), async (req, res) 
   // omitted/invalid so older clients keep the previous behavior.
   const txDate = parseIssueDateBRT(date) || new Date();
 
-  const tx = await riderAccountService.addRiderTransaction({ companyId, riderId: id, amount: adjAmount, type: 'MANUAL_ADJUSTMENT', note: note || (type === 'DEBIT' ? 'Débito manual' : 'Crédito manual'), date: txDate });
+  // Always PENDING so the adjustment appears in "saldo a pagar" and is
+  // settled atomically by /account/pay together with delivery fees.
+  // Without this, the addRiderTransaction heuristic would mark negative
+  // amounts as PAID immediately (intended only for payment offsets from
+  // /account/pay, not for manual debits).
+  const tx = await riderAccountService.addRiderTransaction({ companyId, riderId: id, amount: adjAmount, type: 'MANUAL_ADJUSTMENT', note: note || (type === 'DEBIT' ? 'Débito manual' : 'Crédito manual'), date: txDate, status: 'PENDING' });
 
   // Bridge: registrar no módulo financeiro com a natureza correta.
   //   CREDIT → PAYABLE (empresa deve ao motoboy)
