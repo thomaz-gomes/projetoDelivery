@@ -264,6 +264,9 @@
                 >
                   <img :src="assetUrl(item.url)" :alt="item.filename" />
                   <div class="sia-pack-item-overlay">
+                    <button class="btn btn-sm btn-light" @click="lightboxSrc = assetUrl(item.url)" title="Ampliar imagem">
+                      <i class="bi bi-zoom-in"></i>
+                    </button>
                     <button class="btn btn-sm btn-light" @click="downloadMedia(item)" title="Download">
                       <i class="bi bi-download"></i>
                     </button>
@@ -424,6 +427,9 @@
                 >
                   <img :src="assetUrl(item.url)" :alt="item.filename" />
                   <div class="sia-pack-item-overlay">
+                    <button class="btn btn-sm btn-light" @click="lightboxSrc = assetUrl(item.url)" title="Ampliar imagem">
+                      <i class="bi bi-zoom-in"></i>
+                    </button>
                     <button class="btn btn-sm btn-light" @click="downloadMedia(item)" title="Download">
                       <i class="bi bi-download"></i>
                     </button>
@@ -653,6 +659,9 @@
             >
               <img :src="assetUrl(item.url)" :alt="item.filename" />
               <div class="sia-gallery-item-overlay">
+                <button class="btn btn-sm btn-light" @click="lightboxSrc = assetUrl(item.url)" title="Ampliar imagem">
+                  <i class="bi bi-zoom-in"></i>
+                </button>
                 <button class="btn btn-sm btn-light" @click="downloadMedia(item)" title="Download">
                   <i class="bi bi-download"></i>
                 </button>
@@ -700,6 +709,9 @@
       </div>
 
     </div>
+
+    <!-- Lightbox para ampliar qualquer imagem das galerias -->
+    <ImageLightbox v-if="lightboxSrc" :src="lightboxSrc" @close="lightboxSrc = null" />
   </div>
 </template>
 
@@ -712,8 +724,10 @@ import api from '../api.js'
 import Swal from 'sweetalert2'
 import MediaFeedbackButtons from '../components/MediaFeedbackButtons.vue'
 import SelectInput from '../components/form/select/SelectInput.vue'
+import ImageLightbox from './inbox/ImageLightbox.vue'
 
 const creditsStore = useAiCreditsStore()
+const lightboxSrc = ref(null)
 
 const STYLES = [
   { key: 'minimal', name: 'Minimalista', emoji: '\u{1F90D}', desc: 'Fundo branco, luz estudio' },
