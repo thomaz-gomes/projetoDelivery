@@ -27,10 +27,16 @@ export async function findNeighborhoodForName(companyId, candidateName) {
 export async function addRiderTransaction({ companyId, riderId, orderId = null, amount = 0, type = 'DELIVERY_FEE', date = new Date(), note = null, status = null }) {
   if (!riderId) return null;
 
-  // Status default: payment offsets (negative MANUAL_ADJUSTMENT created by
-  // /account/pay) land already PAID — they are themselves the "paid" record.
-  // Everything else (delivery fees, daily rates, bonuses, manual credits)
-  // starts PENDING. Callers can override explicitly when needed.
+  // Status default (applies only when caller does NOT pass an explicit status):
+  //   negative MANUAL_ADJUSTMENT → PAID (these are payment offsets created by
+  //     /account/pay, which are themselves the settlement record)
+  //   everything else → PENDING
+  //
+  // IMPORTANT: manual debits from /account/adjust must pass status:'PENDING'
+  // explicitly so they appear in "saldo a pagar" and are settled together with
+  // delivery fees when the period is closed. Without the explicit override they
+  // would match the negative-MANUAL_ADJUSTMENT heuristic and be silently marked
+  // PAID on creation, making the period balance ignore them entirely.
   let resolvedStatus = status;
   if (!resolvedStatus) {
     resolvedStatus = (type === 'MANUAL_ADJUSTMENT' && Number(amount) < 0) ? 'PAID' : 'PENDING';
