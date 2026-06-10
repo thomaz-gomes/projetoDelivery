@@ -188,8 +188,8 @@
               <input ref="refFileInput" type="file" accept="image/jpeg,image/png,image/webp" style="display:none" @change="onSlotChange($event, refSlot)" />
             </div>
 
-            <!-- Angulo -->
-            <div class="mb-3">
+            <!-- Angulo (oculto com "Foto de referencia": o angulo e extraido da referencia) -->
+            <div v-if="genStyle !== 'reference'" class="mb-3">
               <label class="form-label small fw-semibold">
                 <i class="bi bi-camera me-1"></i>Angulo de Camera
               </label>

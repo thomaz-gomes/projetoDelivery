@@ -380,6 +380,7 @@ router.post('/generate', requireRole('ADMIN'), async (req, res) => {
                   mood: { type: 'STRING', description: 'Overall mood/atmosphere in a few words' },
                   surface: { type: 'STRING', description: 'Generic background/surface material and color only' },
                   depthOfField: { type: 'STRING', description: 'Focus depth / bokeh' },
+                  cameraAngle: { type: 'STRING', description: 'Abstract camera perspective only, e.g. "overhead 90-degree flat-lay", "45-degree", "eye-level straight-on". No composition/arrangement details.' },
                 },
                 required: ['lighting', 'colorGrading', 'mood'],
               },
@@ -400,6 +401,7 @@ router.post('/generate', requireRole('ADMIN'), async (req, res) => {
             s.mood && `mood: ${s.mood}`,
             s.surface && `background/surface: ${s.surface}`,
             s.depthOfField && `depth of field: ${s.depthOfField}`,
+            s.cameraAngle && `camera angle: ${s.cameraAngle}`,
           ].filter(Boolean).join('; ')
         } catch {
           console.warn('[AI Studio] generate: could not parse reference style JSON:', raw.slice(0, 200))
@@ -430,7 +432,7 @@ router.post('/generate', requireRole('ADMIN'), async (req, res) => {
         lines.push('TARGET SCENE: place the food naturally into the environment shown in the SCENE image, preserving its background, surface and setting with realistic shadows and contact.')
       }
       if (referenceImg) {
-        lines.push(`TARGET STYLE — apply ONLY this abstract photographic treatment to the SUBJECT above. This describes lighting/color/mood/surface, NOT a dish: do NOT recreate, add or imply any food, object or composition from it. Style: ${refStyleText || 'dramatic directional lighting, rich warm color grading, moody atmosphere, dark matte surface, shallow depth of field'}.`)
+        lines.push(`TARGET STYLE — apply ONLY this abstract photographic treatment (lighting, color, mood, surface, depth of field and camera angle) to the SUBJECT above. This is NOT a dish: do NOT recreate, add or imply any food, object or composition from it. Style: ${refStyleText || 'dramatic directional lighting, rich warm color grading, moody atmosphere, dark matte surface, shallow depth of field, 45-degree camera angle'}.`)
       }
       if (!sceneImg && !referenceImg) {
         lines.push(`LIGHTING AND SURFACE: ${STYLE_PROMPTS[styleForPrompt]}.`)
