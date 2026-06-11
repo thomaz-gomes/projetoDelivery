@@ -657,9 +657,17 @@ integrationsRouter.post('/ifood/action', requireRole('ADMIN'), async (req, res) 
 integrationsRouter.post('/aiqfome/link/start', requireRole('ADMIN'), async (req, res) => {
   try {
     const companyId = req.user.companyId;
-    const { token, storeId, merchantId } = req.body;
+    const { token, menuId, merchantId } = req.body;
     if (!token) return res.status(400).json({ message: 'Token do aiqbridge é obrigatório' });
-    const integ = await saveAiqbridgeToken({ companyId, storeId, token, merchantId });
+    if (!menuId) return res.status(400).json({ message: 'Selecione um cardápio' });
+
+    // Integração → cardápio → loja: o cardápio define a loja. Valida que pertence à empresa.
+    const menu = await prisma.menu.findFirst({ where: { id: menuId, store: { companyId } }, select: { id: true, storeId: true } });
+    if (!menu) return res.status(400).json({ message: 'Cardápio inválido ou não pertence à empresa' });
+
+    const integ = await saveAiqbridgeToken({ companyId, storeId: menu.storeId, token, merchantId });
+    // 1 cardápio por integração (default) — substitui qualquer vínculo anterior.
+    await syncIntegrationMenus(integ.id, companyId, [menu.id], menu.id);
     res.json({ ok: true, integrationId: integ.id });
   } catch (e) {
     console.error('[aiqbridge link/start] error:', e?.message ?? e);

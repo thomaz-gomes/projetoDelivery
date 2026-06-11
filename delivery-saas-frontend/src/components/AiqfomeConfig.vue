@@ -14,9 +14,9 @@ const statusMsg = ref('');
 const statusType = ref('info');
 const activeTab = ref('connections');
 
-// New integration form
+// New integration form — vincula a um CARDÁPIO (a loja vem do cardápio)
 const showNewForm = ref(false);
-const newForm = ref({ storeId: null, token: '', merchantId: '' });
+const newForm = ref({ menuId: null, token: '', merchantId: '' });
 const connecting = ref(false);
 
 // Payment mappings
@@ -54,10 +54,17 @@ function copyWebhook() {
   navigator.clipboard.writeText(webhookUrl.value).then(() => showStatus('URL copiada!', 'success')).catch(() => {});
 }
 
-const availableStores = computed(() => {
-  const usedIds = new Set(integrations.value.map(i => i.storeId).filter(Boolean));
-  return stores.value.filter(s => !usedIds.has(s.id));
+// Cardápios ainda não vinculados a nenhuma integração aiqfome (1 cardápio por integração).
+const availableMenus = computed(() => {
+  const usedMenuIds = new Set();
+  integrations.value.forEach(i => (i.menuLinks || []).forEach(l => usedMenuIds.add(l.menuId)));
+  return menus.value.filter(m => !usedMenuIds.has(m.id));
 });
+
+function menuLabel(m) {
+  const s = stores.value.find(x => x.id === m.storeId);
+  return m.name + (s ? ` (${s.name})` : '');
+}
 
 // ── Data loading ──
 async function load() {
@@ -74,19 +81,19 @@ async function loadMenus() {
 }
 
 // ── Connect (save aiqbridge token) ──
-function openNewForm() { newForm.value = { storeId: null, token: '', merchantId: '' }; statusMsg.value = ''; showNewForm.value = true; }
+function openNewForm() { newForm.value = { menuId: null, token: '', merchantId: '' }; statusMsg.value = ''; showNewForm.value = true; }
 function cancelNewForm() { showNewForm.value = false; statusMsg.value = ''; }
 
 async function startConnection() {
   if (connecting.value) return;
   if (!newForm.value.token.trim()) { showStatus('Cole o token gerado no dashboard aiqbridge.', 'danger'); return; }
-  if (!newForm.value.storeId) { showStatus('Selecione a loja.', 'danger'); return; }
+  if (!newForm.value.menuId) { showStatus('Selecione o cardápio.', 'danger'); return; }
   connecting.value = true;
   statusMsg.value = '';
   try {
     await api.post('/integrations/aiqfome/link/start', {
       token: newForm.value.token.trim(),
-      storeId: newForm.value.storeId,
+      menuId: newForm.value.menuId,
       merchantId: newForm.value.merchantId.trim() || null,
     });
     showStatus('Conectado ao aiqfome via aiqbridge!', 'success');
@@ -126,42 +133,31 @@ async function toggleAutoAccept(integ) {
   catch (e) { Swal.fire({ icon: 'error', text: e?.response?.data?.message || 'Erro' }); }
 }
 
-// ── Vínculo de cardápios (integração → cardápio default → loja) ──
+// ── Vínculo do cardápio (1 cardápio por integração → define a loja) ──
 const expandedMenusId = ref(null);
-const menuForm = ref({ menuIds: [], defaultMenuId: null });
+const menuForm = ref({ menuId: null });
 const savingMenus = ref(false);
 
 function openMenuPanel(integ) {
   if (expandedMenusId.value === integ.id) { expandedMenusId.value = null; return; }
   const links = integ.menuLinks || [];
-  menuForm.value = {
-    menuIds: links.map(l => l.menuId),
-    defaultMenuId: links.find(l => l.isDefault)?.menuId || null,
-  };
+  const current = links.find(l => l.isDefault) || links[0] || null;
+  menuForm.value = { menuId: current?.menuId || null };
   expandedMenusId.value = integ.id;
-}
-
-function toggleMenuSelection(menuId) {
-  const idx = menuForm.value.menuIds.indexOf(menuId);
-  if (idx === -1) {
-    menuForm.value.menuIds.push(menuId);
-    if (!menuForm.value.defaultMenuId) menuForm.value.defaultMenuId = menuId;
-  } else {
-    menuForm.value.menuIds.splice(idx, 1);
-    if (menuForm.value.defaultMenuId === menuId) menuForm.value.defaultMenuId = menuForm.value.menuIds[0] || null;
-  }
 }
 
 async function saveMenuLinks(integ) {
   if (savingMenus.value) return;
+  if (!menuForm.value.menuId) { showStatus('Selecione um cardápio.', 'danger'); return; }
   savingMenus.value = true;
   try {
-    await api.put(`/integrations/${integ.id}`, { menuIds: menuForm.value.menuIds, defaultMenuId: menuForm.value.defaultMenuId });
-    showStatus('Cardápios atualizados.', 'success');
+    // 1 cardápio por integração: envia lista de um item, marcado como default.
+    await api.put(`/integrations/${integ.id}`, { menuIds: [menuForm.value.menuId], defaultMenuId: menuForm.value.menuId });
+    showStatus('Cardápio atualizado.', 'success');
     expandedMenusId.value = null;
     await load();
   } catch (e) {
-    showStatus(e?.response?.data?.message || 'Erro ao salvar cardápios.', 'danger');
+    showStatus(e?.response?.data?.message || 'Erro ao salvar cardápio.', 'danger');
   } finally { savingMenus.value = false; }
 }
 
@@ -303,9 +299,8 @@ onMounted(async () => {
                       <button class="btn btn-sm btn-outline-danger" @click="storeAction(integ, 'close')" :disabled="!!storeActionLoading" title="Fechar"><i class="bi bi-shop-window"></i></button>
                       <button class="btn btn-sm btn-outline-warning" @click="storeAction(integ, 'standby')" :disabled="!!storeActionLoading" title="Standby"><i class="bi bi-pause-circle"></i></button>
                     </div>
-                    <button class="btn btn-sm btn-outline-info" @click="openMenuPanel(integ)" title="Cardápios vinculados">
-                      <i class="bi bi-card-list"></i>
-                      <span v-if="integ.menuLinks?.length" class="ms-1">{{ integ.menuLinks.length }}</span>
+                    <button class="btn btn-sm btn-outline-info" @click="openMenuPanel(integ)" title="Cardápio vinculado">
+                      <i class="bi bi-card-list"></i> Cardápio
                     </button>
                     <button v-if="isActive(integ)" class="btn btn-sm btn-outline-primary" @click="configureWebhook(integ)" :disabled="webhookConfiguring === integ.id" title="Registrar webhook no aiqbridge e ativar validação de assinatura">
                       <span v-if="webhookConfiguring === integ.id" class="spinner-border spinner-border-sm me-1"></span>
@@ -316,29 +311,20 @@ onMounted(async () => {
                   </div>
                 </div>
 
-                <!-- Editor de cardápios vinculados (colapsável) -->
+                <!-- Editor do cardápio vinculado (1 por integração, colapsável) -->
                 <div v-if="expandedMenusId === integ.id" class="mt-3 pt-3 border-top">
-                  <div class="d-flex align-items-center justify-content-between mb-2">
-                    <div class="fw-semibold small"><i class="bi bi-card-list me-1"></i>Cardápios vinculados a esta integração</div>
-                    <small class="text-muted"><i class="bi bi-star-fill text-warning"></i> = cardápio default (define a loja)</small>
-                  </div>
+                  <div class="fw-semibold small mb-2"><i class="bi bi-card-list me-1"></i>Cardápio vinculado a esta integração</div>
                   <div v-if="menus.length === 0" class="alert alert-light py-2 small mb-2">
                     Nenhum cardápio cadastrado. Crie um cardápio antes de vincular.
                   </div>
-                  <div v-else class="d-grid gap-1 mb-3" style="max-height:240px;overflow:auto">
-                    <label v-for="m in menus" :key="m.id" class="d-flex align-items-center gap-2 mb-0 small p-1 rounded" style="cursor:pointer">
-                      <input type="checkbox" :checked="menuForm.menuIds.includes(m.id)" @change="toggleMenuSelection(m.id)" class="form-check-input m-0" />
-                      <span class="flex-grow-1">{{ m.name }}{{ stores.find(s => s.id === m.storeId) ? ` (${stores.find(s => s.id === m.storeId).name})` : '' }}</span>
-                      <button v-if="menuForm.menuIds.includes(m.id)" type="button" class="btn btn-link btn-sm p-0"
-                        :class="menuForm.defaultMenuId === m.id ? 'text-warning' : 'text-muted'"
-                        @click.prevent="menuForm.defaultMenuId = m.id"
-                        :title="menuForm.defaultMenuId === m.id ? 'Cardápio default' : 'Definir como default'">
-                        <i :class="menuForm.defaultMenuId === m.id ? 'bi bi-star-fill' : 'bi bi-star'"></i>
-                      </button>
-                    </label>
+                  <div v-else style="max-width:480px">
+                    <SelectInput v-model="menuForm.menuId">
+                      <option :value="null">-- Selecione o cardápio --</option>
+                      <option v-for="m in menus" :key="m.id" :value="m.id">{{ menuLabel(m) }}</option>
+                    </SelectInput>
                   </div>
-                  <div class="d-flex justify-content-between align-items-center">
-                    <small class="text-muted"><i class="bi bi-info-circle me-1"></i>Pedidos do aiqfome vão para a loja do cardápio default.</small>
+                  <div class="d-flex justify-content-between align-items-center mt-3">
+                    <small class="text-muted"><i class="bi bi-info-circle me-1"></i>Os pedidos do aiqfome vão para a loja deste cardápio.</small>
                     <div class="d-flex gap-1">
                       <button class="btn btn-sm btn-outline-secondary" @click="expandedMenusId = null">Cancelar</button>
                       <button class="btn btn-sm btn-primary" @click="saveMenuLinks(integ)" :disabled="savingMenus">
@@ -376,7 +362,7 @@ onMounted(async () => {
           </div>
         </div>
 
-        <button v-if="!showNewForm" class="btn btn-outline-primary" @click="openNewForm" :disabled="availableStores.length === 0">
+        <button v-if="!showNewForm" class="btn btn-outline-primary" @click="openNewForm" :disabled="availableMenus.length === 0">
           <i class="bi bi-plus-circle"></i> Adicionar integração
         </button>
 
@@ -393,11 +379,12 @@ onMounted(async () => {
             </div>
             <div class="row g-3" style="max-width:600px">
               <div class="col-12">
-                <label class="form-label">Loja</label>
-                <SelectInput v-model="newForm.storeId" inputClass="form-select">
+                <label class="form-label">Cardápio</label>
+                <SelectInput v-model="newForm.menuId">
                   <option :value="null">-- Selecione --</option>
-                  <option v-for="s in availableStores" :key="s.id" :value="s.id">{{ s.name }}</option>
+                  <option v-for="m in availableMenus" :key="m.id" :value="m.id">{{ menuLabel(m) }}</option>
                 </SelectInput>
+                <div class="form-text">A loja é definida pelo cardápio. Um cardápio por integração.</div>
               </div>
               <div class="col-12">
                 <label class="form-label">Token aiqbridge</label>
