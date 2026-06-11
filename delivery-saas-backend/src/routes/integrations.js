@@ -705,12 +705,7 @@ integrationsRouter.post('/aiqfome/webhook/config', requireRole('ADMIN'), async (
     }
 
     const resp = await aiqfomePost(integ.id, '/ifood/order/v1.0/webhook/config', { webhook_url: url });
-    const secret = resp?.secret_key || resp?.secretKey || resp?.secret || resp?.data?.secret_key || null;
-
-    await prisma.apiIntegration.update({
-      where: { id: integ.id },
-      data: { webhookSecret: secret || integ.webhookSecret || null },
-    });
+    let secret = resp?.secret_key || resp?.secretKey || resp?.secret || resp?.data?.secret_key || null;
 
     // O registro nem sempre ativa a entrega — garante enabled=true (best-effort).
     let enabled = null;
@@ -720,6 +715,27 @@ integrationsRouter.post('/aiqfome/webhook/config', requireRole('ADMIN'), async (
     } catch (e) {
       console.warn('[aiqbridge webhook/config] toggle enable falhou:', e?.response?.data || e?.message);
     }
+
+    // O POST normalmente NÃO retorna o secret_key — só o GET. Busca a config
+    // registrada para capturar o secret, o merchant_id e o estado de ativação.
+    let merchantFromCfg = null;
+    try {
+      const cfg = await aiqfomeGet(integ.id, '/ifood/order/v1.0/webhook/config');
+      secret = secret || cfg?.secret_key || cfg?.secretKey || cfg?.secret || null;
+      merchantFromCfg = cfg?.merchant_id || cfg?.merchantId || null;
+      if (cfg?.is_active != null) enabled = !!cfg.is_active;
+    } catch (e) {
+      console.warn('[aiqbridge webhook/config] GET pós-registro falhou:', e?.response?.data || e?.message);
+    }
+
+    await prisma.apiIntegration.update({
+      where: { id: integ.id },
+      data: {
+        webhookSecret: secret || integ.webhookSecret || null,
+        // Captura o merchantId da bridge — essencial para rotear webhooks à loja certa.
+        merchantId: integ.merchantId || (merchantFromCfg != null ? String(merchantFromCfg) : null),
+      },
+    });
 
     res.json({ ok: true, registered: true, secretCaptured: !!secret, enabled, webhookUrl: url });
   } catch (e) {

@@ -17,30 +17,40 @@ const ORDER_API = '/ifood/order/v1.0';
 /**
  * Resolve companyId from merchantId in ApiIntegration
  */
+// Escolhe o vínculo de cardápio default (ou o único), como no iFood.
+function pickMenuLink(links) {
+  const arr = Array.isArray(links) ? links : [];
+  if (!arr.length) return null;
+  return arr.find(l => l.isDefault) || (arr.length === 1 ? arr[0] : null);
+}
+
 async function resolveCompany(merchantId) {
-  if (!merchantId) return null;
-  const key = String(merchantId).trim();
+  const include = { menuLinks: { include: { menu: { select: { id: true, name: true, storeId: true } } } } };
 
-  const integ = await prisma.apiIntegration.findFirst({
-    where: { provider: 'AIQFOME', merchantId: key },
-    select: { id: true, companyId: true, storeId: true, autoAccept: true },
-  });
-
-  if (integ) {
-    let storeId = integ.storeId;
-    if (!storeId) {
-      const first = await prisma.store.findFirst({ where: { companyId: integ.companyId }, select: { id: true }, orderBy: { createdAt: 'asc' } });
-      storeId = first?.id || null;
-    }
-    return { integrationId: integ.id, companyId: integ.companyId, storeId, autoAccept: !!integ.autoAccept };
+  let integ = null;
+  if (merchantId) {
+    const key = String(merchantId).trim();
+    integ = await prisma.apiIntegration.findFirst({ where: { provider: 'AIQFOME', merchantId: key }, include });
   }
-
-  // Fallback: only one AIQFOME integration
-  const all = await prisma.apiIntegration.findMany({ where: { provider: 'AIQFOME' }, select: { id: true, companyId: true, storeId: true, autoAccept: true } });
-  if (all.length === 1) {
-    return { integrationId: all[0].id, companyId: all[0].companyId, storeId: all[0].storeId, autoAccept: !!all[0].autoAccept };
+  // Fallback: única integração AIQFOME (cobre merchantId ausente no cadastro)
+  if (!integ) {
+    const all = await prisma.apiIntegration.findMany({ where: { provider: 'AIQFOME' }, include });
+    if (all.length === 1) integ = all[0];
   }
-  return null;
+  if (!integ) return null;
+
+  // Roteamento por cardápio: integração → cardápio default → loja (mesma lógica
+  // do iFood via applyMenuLinkRouting). Cai para storeId direto se não houver vínculo.
+  const link = pickMenuLink(integ.menuLinks);
+  const menuId = link?.menu?.id || null;
+  let storeId = link?.menu?.storeId || integ.storeId || null;
+  if (!storeId) {
+    const first = await prisma.store.findFirst({ where: { companyId: integ.companyId }, select: { id: true }, orderBy: { createdAt: 'asc' } });
+    storeId = first?.id || null;
+  }
+  if (link) console.log('[aiqbridge] roteando via cardápio:', { menuId, menuName: link.menu?.name, storeId, isDefault: link.isDefault });
+
+  return { integrationId: integ.id, companyId: integ.companyId, storeId, menuId, autoAccept: !!integ.autoAccept };
 }
 
 /**
@@ -48,21 +58,31 @@ async function resolveCompany(merchantId) {
  */
 function mapEventToStatus(eventCode) {
   const map = {
-    // Formas longas
+    // Formato iFood OUT (o que a bridge realmente envia no payload)
     'PLACED': 'PENDENTE_ACEITE',
-    'NEW_ORDER': 'PENDENTE_ACEITE',
     'CONFIRMED': 'EM_PREPARO',
+    'READY_FOR_PICKUP': 'PRONTO',
     'READY_TO_PICKUP': 'PRONTO',
     'DISPATCHED': 'SAIU_PARA_ENTREGA',
+    'DELIVERED': 'CONCLUIDO',
     'CONCLUDED': 'CONCLUIDO',
     'CANCELLED': 'CANCELADO',
-    // Códigos curtos do aiqbridge (PLC/CFM/RDY/DSP/CON/CAN)
+    // Códigos curtos Open Delivery (PLC/CFM/RDY/DSP/CON/CAN)
     'PLC': 'PENDENTE_ACEITE',
     'CFM': 'EM_PREPARO',
     'RDY': 'PRONTO',
     'DSP': 'SAIU_PARA_ENTREGA',
     'CON': 'CONCLUIDO',
     'CAN': 'CANCELADO',
+    // Nomes de event_type do aiqbridge (ORDER_*) — defensivo
+    'NEW_ORDER': 'PENDENTE_ACEITE',
+    'ORDER_CREATED': 'PENDENTE_ACEITE',
+    'ORDER_CONFIRMED': 'EM_PREPARO',
+    'ORDER_PREPARATION_STARTED': 'EM_PREPARO',
+    'ORDER_READY': 'PRONTO',
+    'ORDER_DISPATCHED': 'SAIU_PARA_ENTREGA',
+    'ORDER_DELIVERED': 'CONCLUIDO',
+    'ORDER_CANCELLED': 'CANCELADO',
   };
   return map[String(eventCode).toUpperCase()] || null;
 }
@@ -87,7 +107,7 @@ export async function processAiqfomeWebhook(eventId) {
     // Resolve company
     const resolved = await resolveCompany(merchantId);
     if (!resolved) throw new Error(`Company not found for merchantId: ${merchantId}`);
-    const { integrationId, companyId, storeId, autoAccept } = resolved;
+    const { integrationId, companyId, storeId, menuId: routedMenuId, autoAccept } = resolved;
 
     const externalId = String(orderId);
     const status = mapEventToStatus(eventType);
@@ -192,7 +212,8 @@ export async function processAiqfomeWebhook(eventId) {
       // Aiqfome payloads don't carry a menuId — derive it from the store so
       // every order ends up with menuId set (per-menu WhatsApp routing and
       // {{loja}} placeholder depend on it).
-      const resolvedMenuId = await resolveMenuForStore(storeId);
+      // Prefere o cardápio vinculado à integração (default); cai para a heurística por loja.
+      const resolvedMenuId = routedMenuId || await resolveMenuForStore(storeId);
 
       const savedOrder = await prisma.order.create({
         data: {

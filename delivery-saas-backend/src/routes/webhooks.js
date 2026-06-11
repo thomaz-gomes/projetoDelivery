@@ -707,18 +707,25 @@ import { processAiqfomeWebhook } from '../integrations/aiqfome/webhookProcessor.
 // Resolve the aiqbridge signing secret for an incoming webhook — by merchantId,
 // or the single AIQFOME integration as fallback. Returns null when none stored.
 async function resolveAiqfomeSecret(payload) {
-  const order = (payload && (payload.data || payload)) || {};
-  const merchantId = payload?.merchant_id || payload?.merchantId || order?.merchant_id || order?.merchantId || null;
-  if (merchantId) {
-    const integ = await prisma.apiIntegration.findFirst({
-      where: { provider: 'AIQFOME', merchantId: String(merchantId) },
-      select: { webhookSecret: true },
-    });
-    if (integ) return integ.webhookSecret || null;
+  try {
+    const order = (payload && (payload.data || payload)) || {};
+    const merchantId = payload?.merchant_id || payload?.merchantId || order?.merchant_id || order?.merchantId || null;
+    if (merchantId) {
+      const integ = await prisma.apiIntegration.findFirst({
+        where: { provider: 'AIQFOME', merchantId: String(merchantId) },
+        select: { webhookSecret: true },
+      });
+      if (integ) return integ.webhookSecret || null;
+    }
+    const all = await prisma.apiIntegration.findMany({ where: { provider: 'AIQFOME' }, select: { webhookSecret: true } });
+    if (all.length === 1) return all[0].webhookSecret || null;
+    return null;
+  } catch (e) {
+    // Coluna webhookSecret pode não existir ainda (migração pendente) — não
+    // bloquear a chegada do pedido por causa disso. Apenas pula a validação.
+    console.warn('[aiqfome webhook] resolveAiqfomeSecret falhou (segue sem validar):', e?.message || e);
+    return null;
   }
-  const all = await prisma.apiIntegration.findMany({ where: { provider: 'AIQFOME' }, select: { webhookSecret: true } });
-  if (all.length === 1) return all[0].webhookSecret || null;
-  return null;
 }
 
 // Validate the X-Signature header (HMAC-SHA256 over the raw body).
