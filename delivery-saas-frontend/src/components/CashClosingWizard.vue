@@ -271,7 +271,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, watch } from 'vue';
 import api from '../api.js';
 import { formatCurrency } from '../utils/formatters.js';
 import CurrencyInput from './form/input/CurrencyInput.vue';
@@ -401,10 +401,21 @@ async function finalize() {
   }
 }
 
-onMounted(() => {
+// O componente fica montado permanentemente dentro do CashControl; carregar
+// o resumo apenas no onMounted congelava os valores no estado da página em
+// que ela foi aberta. Recarrega e reseta o estado a cada abertura do wizard.
+watch(() => props.visible, (visible) => {
+  if (!visible) return;
+  currentStep.value = 0;
+  declaredValues.value = {};
+  expectedValues.value = {};
+  paymentsByMethod.value = {};
+  closingNote.value = '';
+  lastMinuteMovements.value = [];
+  newMovement.value = { type: 'WITHDRAWAL', amount: null, note: '' };
   loadSummary();
   loadSettings();
-});
+}, { immediate: true });
 </script>
 
 <style scoped>
