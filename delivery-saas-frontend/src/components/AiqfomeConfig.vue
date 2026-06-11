@@ -4,6 +4,7 @@ import Swal from 'sweetalert2';
 import api from '../api';
 import TextInput from './form/input/TextInput.vue';
 import SelectInput from './form/select/SelectInput.vue';
+import { API_URL } from '../config';
 
 const integrations = ref([]);
 const stores = ref([]);
@@ -41,9 +42,12 @@ function storeName(integ) {
 }
 
 const webhookUrl = computed(() => {
-  const origin = window.location.origin || '';
-  const apiBase = origin.replace('app.', 'api.');
-  return `${apiBase}/webhooks/aiqfome`;
+  // Prefere a base real do backend (axios baseURL); cai para o origin (app.->api.)
+  // só quando API_URL é relativo/vazio (modo proxy em dev).
+  const base = (API_URL && /^https?:\/\//.test(API_URL))
+    ? API_URL.replace(/\/$/, '')
+    : (window.location.origin || '').replace('app.', 'api.');
+  return `${base}/webhooks/aiqfome`;
 });
 
 function copyWebhook() {
@@ -134,6 +138,33 @@ async function configureWebhook(integ) {
   } catch (e) {
     showStatus(e?.response?.data?.message || 'Falha ao configurar webhook.', 'danger');
   } finally { webhookConfiguring.value = ''; }
+}
+
+const webhookTesting = ref(false);
+async function testWebhook() {
+  webhookTesting.value = true;
+  try {
+    await api.post('/integrations/aiqfome/webhook/test');
+    showStatus('Evento de teste disparado. Veja se o pedido aparece e confira o log OUT no aiqbridge.', 'success');
+  } catch (e) {
+    showStatus(e?.response?.data?.message || 'Falha ao disparar evento de teste.', 'danger');
+  } finally { webhookTesting.value = false; }
+}
+
+const webhookInspecting = ref(false);
+async function inspectWebhook() {
+  webhookInspecting.value = true;
+  try {
+    const { data } = await api.get('/integrations/aiqfome/webhook/config');
+    await Swal.fire({
+      title: 'Webhook registrado no aiqbridge',
+      html: `<pre style="text-align:left;white-space:pre-wrap;font-size:12px">${JSON.stringify(data.config, null, 2)}</pre>
+             <div class="small text-muted mt-2">Secret armazenado: ${data.hasSecret ? 'sim' : 'não'}</div>`,
+      width: 600,
+    });
+  } catch (e) {
+    showStatus(e?.response?.data?.message || 'Falha ao consultar a config do webhook.', 'danger');
+  } finally { webhookInspecting.value = false; }
 }
 
 // ── Payment mappings ──
@@ -256,7 +287,17 @@ onMounted(async () => {
               <div class="small text-muted">URL do Webhook — use <strong>Registrar webhook</strong> acima para configurar automaticamente, ou cole no dashboard aiqbridge</div>
               <code class="small user-select-all">{{ webhookUrl }}</code>
             </div>
-            <button class="btn btn-sm btn-outline-secondary ms-auto" @click="copyWebhook" title="Copiar"><i class="bi bi-clipboard"></i></button>
+            <div class="ms-auto d-flex gap-1">
+              <button class="btn btn-sm btn-outline-secondary" @click="inspectWebhook" :disabled="webhookInspecting" title="Ver config registrada no aiqbridge">
+                <span v-if="webhookInspecting" class="spinner-border spinner-border-sm"></span>
+                <i v-else class="bi bi-search"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-secondary" @click="testWebhook" :disabled="webhookTesting" title="Disparar evento de teste">
+                <span v-if="webhookTesting" class="spinner-border spinner-border-sm"></span>
+                <i v-else class="bi bi-send"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-secondary" @click="copyWebhook" title="Copiar"><i class="bi bi-clipboard"></i></button>
+            </div>
           </div>
         </div>
 

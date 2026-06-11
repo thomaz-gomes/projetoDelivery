@@ -744,6 +744,14 @@ webhooksRouter.post('/aiqfome', async (req, res) => {
   try {
     const payload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
 
+    // Log de chegada — confirma que a bridge alcançou nosso webhook.
+    console.log('[aiqfome webhook] IN', {
+      event: payload?.event || payload?.fullCode || payload?.code || null,
+      orderId: payload?.order_id || payload?.orderId || payload?.id || null,
+      merchantId: payload?.merchant_id || payload?.merchantId || null,
+      hasSignature: !!(req.headers['x-signature'] || req.headers['x-aiqbridge-signature']),
+    });
+
     // 🔐 Verifica assinatura HMAC quando um secret estiver configurado
     const sigHeader = req.headers['x-signature'] || req.headers['x-aiqbridge-signature'] || '';
     const secret = await resolveAiqfomeSecret(payload);

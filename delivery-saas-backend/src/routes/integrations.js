@@ -712,10 +712,53 @@ integrationsRouter.post('/aiqfome/webhook/config', requireRole('ADMIN'), async (
       data: { webhookSecret: secret || integ.webhookSecret || null },
     });
 
-    res.json({ ok: true, registered: true, secretCaptured: !!secret, webhookUrl: url });
+    // O registro nem sempre ativa a entrega — garante enabled=true (best-effort).
+    let enabled = null;
+    try {
+      await aiqfomePut(integ.id, '/ifood/order/v1.0/webhook/config/toggle?enabled=true', {});
+      enabled = true;
+    } catch (e) {
+      console.warn('[aiqbridge webhook/config] toggle enable falhou:', e?.response?.data || e?.message);
+    }
+
+    res.json({ ok: true, registered: true, secretCaptured: !!secret, enabled, webhookUrl: url });
   } catch (e) {
     console.error('[aiqbridge webhook/config] error:', e?.response?.data || e?.message);
     res.status(500).json({ message: 'Falha ao registrar webhook no aiqbridge', error: e?.response?.data?.message || e?.message || String(e) });
+  }
+});
+
+// Inspeciona a config de webhook registrada no aiqbridge (URL + enabled).
+// Diagnóstico: confirma se a bridge está apontando para a URL certa e ativa.
+integrationsRouter.get('/aiqfome/webhook/config', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const integ = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'AIQFOME' }, orderBy: { updatedAt: 'desc' } });
+    if (!integ) return res.status(404).json({ message: 'sem integração aiqfome' });
+    if (!integ.accessToken) return res.status(400).json({ message: 'Conecte o token do aiqbridge primeiro.' });
+
+    const config = await aiqfomeGet(integ.id, '/ifood/order/v1.0/webhook/config');
+    res.json({ ok: true, config, hasSecret: !!integ.webhookSecret });
+  } catch (e) {
+    console.error('[aiqbridge webhook/config GET] error:', e?.response?.data || e?.message);
+    res.status(500).json({ message: 'Falha ao consultar webhook no aiqbridge', error: e?.response?.data?.message || e?.message || String(e) });
+  }
+});
+
+// Dispara um evento de teste sintético: a bridge faz POST na nossa URL de webhook.
+// Use para confirmar a entrega ponta-a-ponta sem precisar de um pedido real.
+integrationsRouter.post('/aiqfome/webhook/test', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const integ = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'AIQFOME' }, orderBy: { updatedAt: 'desc' } });
+    if (!integ) return res.status(404).json({ message: 'sem integração aiqfome' });
+    if (!integ.accessToken) return res.status(400).json({ message: 'Conecte o token do aiqbridge primeiro.' });
+
+    const result = await aiqfomePost(integ.id, '/ifood/order/v1.0/webhook/config/test', {});
+    res.json({ ok: true, result });
+  } catch (e) {
+    console.error('[aiqbridge webhook/test] error:', e?.response?.data || e?.message);
+    res.status(500).json({ message: 'Falha ao disparar evento de teste no aiqbridge', error: e?.response?.data?.message || e?.message || String(e) });
   }
 });
 
