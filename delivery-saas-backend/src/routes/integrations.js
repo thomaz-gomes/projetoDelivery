@@ -808,15 +808,15 @@ integrationsRouter.get('/aiqfome/webhook/events', requireRole('ADMIN'), async (r
   try {
     const events = await prisma.webhookEvent.findMany({
       where: { provider: 'AIQFOME' },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { receivedAt: 'desc' },
       take: 20,
-      select: { id: true, eventId: true, status: true, error: true, createdAt: true, processedAt: true, payload: true },
+      select: { id: true, eventId: true, status: true, error: true, receivedAt: true, processedAt: true, payload: true },
     });
     const rows = events.map(e => ({
       eventId: e.eventId,
       status: e.status,           // RECEIVED | PROCESSED | ERROR
       error: e.error || null,
-      createdAt: e.createdAt,
+      receivedAt: e.receivedAt,
       processedAt: e.processedAt,
       event: e.payload?.event || e.payload?.code || e.payload?.fullCode || null,
       orderId: e.payload?.order_id || e.payload?.orderId || e.payload?.id || null,

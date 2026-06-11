@@ -228,7 +228,7 @@ async function viewWebhookEvents() {
     const badge = (s) => s === 'PROCESSED' ? '🟢' : s === 'ERROR' ? '🔴' : '🟡';
     const rows = evts.length
       ? evts.map(e => `<tr>
-          <td style="white-space:nowrap">${fmt(e.createdAt)}</td>
+          <td style="white-space:nowrap">${fmt(e.receivedAt)}</td>
           <td>${badge(e.status)} ${e.status}</td>
           <td>${e.event || '—'}</td>
           <td>${e.merchantId || '—'}</td>
