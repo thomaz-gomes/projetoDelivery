@@ -3,6 +3,10 @@
 import { aiqfomePost } from './client.js';
 import { prisma } from '../../prisma.js';
 
+// aiqbridge expõe os pedidos pela família iFood-compatível, namespaced por versão.
+// Sem este prefixo as chamadas caem em 404 (ver merchant/status que já o usa).
+const ORDER_API = '/ifood/order/v1.0';
+
 /**
  * Notify aiqbridge of order status change.
  * Uses iFood-compatible endpoints: confirm, startPreparation, readyToPickup, dispatch, delivered, cancel
@@ -29,7 +33,7 @@ export async function updateAiqfomeOrderStatus(companyId, externalId, localStatu
     if (!action) return null;
 
     const body = action === 'cancel' ? { reason: 'Cancelado pelo estabelecimento' } : {};
-    const result = await aiqfomePost(integration.id, `/orders/${externalId}/${action}`, body);
+    const result = await aiqfomePost(integration.id, `${ORDER_API}/orders/${externalId}/${action}`, body);
     console.log(`[aiqbridge] Order ${externalId} -> ${action}`);
     return result;
   } catch (err) {

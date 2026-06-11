@@ -5,7 +5,7 @@ import { prisma } from '../../prisma.js';
 
 const MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MS = 2000;
-const AIQBRIDGE_BASE_URL = process.env.AIQBRIDGE_BASE_URL || 'https://api.aiqbridge.com.br';
+const AIQBRIDGE_BASE_URL = process.env.AIQBRIDGE_BASE_URL || 'https://www.aiqbridge.com.br';
 
 function attachRateLimitInterceptor(instance) {
   instance.interceptors.response.use(

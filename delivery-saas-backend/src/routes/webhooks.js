@@ -704,9 +704,58 @@ webhooksRouter.post("/ifood", async (req, res) => {
 // ───── aiqfome webhook ─────
 import { processAiqfomeWebhook } from '../integrations/aiqfome/webhookProcessor.js';
 
+// Resolve the aiqbridge signing secret for an incoming webhook — by merchantId,
+// or the single AIQFOME integration as fallback. Returns null when none stored.
+async function resolveAiqfomeSecret(payload) {
+  const order = (payload && (payload.data || payload)) || {};
+  const merchantId = payload?.merchant_id || payload?.merchantId || order?.merchant_id || order?.merchantId || null;
+  if (merchantId) {
+    const integ = await prisma.apiIntegration.findFirst({
+      where: { provider: 'AIQFOME', merchantId: String(merchantId) },
+      select: { webhookSecret: true },
+    });
+    if (integ) return integ.webhookSecret || null;
+  }
+  const all = await prisma.apiIntegration.findMany({ where: { provider: 'AIQFOME' }, select: { webhookSecret: true } });
+  if (all.length === 1) return all[0].webhookSecret || null;
+  return null;
+}
+
+// Validate the X-Signature header (HMAC-SHA256 over the raw body).
+// When no secret is configured, validation is skipped (legacy/manual setups).
+function verifyAiqfomeSignature(rawBody, secret, header) {
+  if (!secret) return { ok: true, skipped: true };
+  try {
+    if (!header) return { ok: false };
+    const expectedHex = crypto.createHmac('sha256', secret).update(rawBody != null ? String(rawBody) : '').digest('hex');
+    const provided = String(header).trim();
+    // aiqbridge sends "sha256=<hex>"; accept the bare hex too just in case
+    return {
+      ok: [`sha256=${expectedHex}`, expectedHex].some(c =>
+        c.length === provided.length && crypto.timingSafeEqual(Buffer.from(c), Buffer.from(provided))
+      ),
+    };
+  } catch (e) {
+    return { ok: false };
+  }
+}
+
 webhooksRouter.post('/aiqfome', async (req, res) => {
   try {
     const payload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+
+    // 🔐 Verifica assinatura HMAC quando um secret estiver configurado
+    const sigHeader = req.headers['x-signature'] || req.headers['x-aiqbridge-signature'] || '';
+    const secret = await resolveAiqfomeSecret(payload);
+    const sig = verifyAiqfomeSignature(req.rawBody, secret, sigHeader);
+    if (!sig.ok) {
+      console.warn('[aiqfome webhook] assinatura X-Signature inválida — rejeitando');
+      return res.status(401).json({ error: 'invalid signature' });
+    }
+    if (sig.skipped) {
+      console.warn('[aiqfome webhook] sem webhookSecret configurado — assinatura NÃO verificada. Registre o webhook para ativar a validação.');
+    }
+
     const order = payload.data || payload;
     const eventId = order.id ? `aiqfome-${order.id}` : null;
 

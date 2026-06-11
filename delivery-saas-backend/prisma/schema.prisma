@@ -671,6 +671,9 @@ model ApiIntegration {
   tokenType      String? // Bearer
   tokenExpiresAt DateTime?
 
+  // ---- Webhook signing (aiqbridge / Open Delivery) ----
+  webhookSecret String? // secret_key retornado no registro do webhook; valida o header X-Signature (HMAC-SHA256)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

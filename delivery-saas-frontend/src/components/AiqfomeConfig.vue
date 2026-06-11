@@ -123,12 +123,17 @@ async function toggleAutoAccept(integ) {
 }
 
 // ── Webhook config ──
+const webhookConfiguring = ref('');
 async function configureWebhook(integ) {
+  webhookConfiguring.value = integ.id;
   try {
-    const webhookUrl = `${window.location.origin.replace('app.', 'api.')}/webhooks/aiqfome`;
-    await api.post(`/integrations/aiqfome/webhook/config`, { integrationId: integ.id, url: webhookUrl });
-    showStatus('Webhook configurado!', 'success');
-  } catch (e) { showStatus(e?.response?.data?.message || 'Falha ao configurar webhook.', 'danger'); }
+    const { data } = await api.post(`/integrations/aiqfome/webhook/config`, { integrationId: integ.id, webhookUrl: webhookUrl.value });
+    showStatus(data.secretCaptured
+      ? 'Webhook registrado e assinatura ativada!'
+      : 'Webhook registrado (sem secret retornado — verifique no aiqbridge).', 'success');
+  } catch (e) {
+    showStatus(e?.response?.data?.message || 'Falha ao configurar webhook.', 'danger');
+  } finally { webhookConfiguring.value = ''; }
 }
 
 // ── Payment mappings ──
@@ -176,7 +181,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div>
+  <div class="container py-4">
     <div class="d-flex align-items-center justify-content-between mb-4">
       <div class="d-flex align-items-center gap-3">
         <img src="https://aiqfome.com/favicon.ico" alt="aiqfome" style="height:36px" />
@@ -228,6 +233,10 @@ onMounted(async () => {
                       <button class="btn btn-sm btn-outline-danger" @click="storeAction(integ, 'close')" :disabled="!!storeActionLoading" title="Fechar"><i class="bi bi-shop-window"></i></button>
                       <button class="btn btn-sm btn-outline-warning" @click="storeAction(integ, 'standby')" :disabled="!!storeActionLoading" title="Standby"><i class="bi bi-pause-circle"></i></button>
                     </div>
+                    <button v-if="isActive(integ)" class="btn btn-sm btn-outline-primary" @click="configureWebhook(integ)" :disabled="webhookConfiguring === integ.id" title="Registrar webhook no aiqbridge e ativar validação de assinatura">
+                      <span v-if="webhookConfiguring === integ.id" class="spinner-border spinner-border-sm me-1"></span>
+                      <i v-else class="bi bi-broadcast"></i> Registrar webhook
+                    </button>
                     <button v-if="isActive(integ)" class="btn btn-sm btn-outline-danger" @click="disconnect(integ)"><i class="bi bi-x-circle"></i> Desconectar</button>
                     <button class="btn btn-sm btn-outline-secondary" @click="deleteInteg(integ)" title="Remover"><i class="bi bi-trash"></i></button>
                   </div>
@@ -244,7 +253,7 @@ onMounted(async () => {
           <div class="card-body py-2 d-flex align-items-center gap-2">
             <i class="bi bi-globe text-primary"></i>
             <div>
-              <div class="small text-muted">URL do Webhook (configure no aiqbridge)</div>
+              <div class="small text-muted">URL do Webhook — use <strong>Registrar webhook</strong> acima para configurar automaticamente, ou cole no dashboard aiqbridge</div>
               <code class="small user-select-all">{{ webhookUrl }}</code>
             </div>
             <button class="btn btn-sm btn-outline-secondary ms-auto" @click="copyWebhook" title="Copiar"><i class="bi bi-clipboard"></i></button>

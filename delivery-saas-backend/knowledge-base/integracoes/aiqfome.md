@@ -18,7 +18,7 @@ Menu lateral → Integracoes → aiqfome
 6. Clique em **Salvar e conectar**.
 
 ### Configurar o webhook
-Apos conectar, o sistema exibe a **URL do Webhook**. Copie essa URL e configure no dashboard aiqbridge para que os pedidos sejam enviados ao sistema.
+Apos conectar, clique em **Registrar webhook** no card da integracao. O sistema registra a URL automaticamente no aiqbridge e ativa a validacao de assinatura (HMAC) dos pedidos recebidos. Alternativamente, copie a **URL do Webhook** exibida e configure manualmente no dashboard aiqbridge.
 
 ### Aceite automatico
 Ative o botao **Aceite automatico** para que os pedidos do aiqfome sejam aceitos automaticamente.

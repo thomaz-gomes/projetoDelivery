@@ -684,6 +684,41 @@ integrationsRouter.post('/aiqfome/unlink', requireRole('ADMIN'), async (req, res
   }
 });
 
+// Register the webhook URL with aiqbridge and capture the signing secret.
+// aiqbridge returns secret_key only once (on registration); we persist it so
+// the /webhooks/aiqfome handler can validate the X-Signature HMAC.
+integrationsRouter.post('/aiqfome/webhook/config', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId;
+    const { integrationId, webhookUrl } = req.body || {};
+
+    const integ = integrationId
+      ? await prisma.apiIntegration.findFirst({ where: { id: integrationId, companyId, provider: 'AIQFOME' } })
+      : await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'AIQFOME' }, orderBy: { updatedAt: 'desc' } });
+    if (!integ) return res.status(404).json({ message: 'sem integração aiqfome' });
+    if (!integ.accessToken) return res.status(400).json({ message: 'Conecte o token do aiqbridge antes de configurar o webhook.' });
+
+    // Frontend computes the public URL (app./api. domain aware). Validate it.
+    const url = String(webhookUrl || '').trim();
+    if (!/^https?:\/\/.+\/webhooks\/aiqfome$/.test(url)) {
+      return res.status(400).json({ message: 'webhookUrl inválida (esperado https://.../webhooks/aiqfome)' });
+    }
+
+    const resp = await aiqfomePost(integ.id, '/ifood/order/v1.0/webhook/config', { webhook_url: url });
+    const secret = resp?.secret_key || resp?.secretKey || resp?.secret || resp?.data?.secret_key || null;
+
+    await prisma.apiIntegration.update({
+      where: { id: integ.id },
+      data: { webhookSecret: secret || integ.webhookSecret || null },
+    });
+
+    res.json({ ok: true, registered: true, secretCaptured: !!secret, webhookUrl: url });
+  } catch (e) {
+    console.error('[aiqbridge webhook/config] error:', e?.response?.data || e?.message);
+    res.status(500).json({ message: 'Falha ao registrar webhook no aiqbridge', error: e?.response?.data?.message || e?.message || String(e) });
+  }
+});
+
 // ── aiqfome Payment Method Mappings ──
 
 const AIQFOME_DEFAULT_CODES = [

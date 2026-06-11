@@ -10,6 +10,10 @@ import { resolveMenuForStore } from '../../utils/resolveMenuForStore.js';
 import { aiqfomeGet, aiqfomePost } from './client.js';
 import { reverseStockMovementForOrder } from '../../services/stockFromOrder.js';
 
+// aiqbridge expõe os pedidos pela família iFood-compatível, namespaced por versão.
+// Sem este prefixo o fetch de detalhes e o confirm caem em 404.
+const ORDER_API = '/ifood/order/v1.0';
+
 /**
  * Resolve companyId from merchantId in ApiIntegration
  */
@@ -44,6 +48,7 @@ async function resolveCompany(merchantId) {
  */
 function mapEventToStatus(eventCode) {
   const map = {
+    // Formas longas
     'PLACED': 'PENDENTE_ACEITE',
     'NEW_ORDER': 'PENDENTE_ACEITE',
     'CONFIRMED': 'EM_PREPARO',
@@ -51,6 +56,13 @@ function mapEventToStatus(eventCode) {
     'DISPATCHED': 'SAIU_PARA_ENTREGA',
     'CONCLUDED': 'CONCLUIDO',
     'CANCELLED': 'CANCELADO',
+    // Códigos curtos do aiqbridge (PLC/CFM/RDY/DSP/CON/CAN)
+    'PLC': 'PENDENTE_ACEITE',
+    'CFM': 'EM_PREPARO',
+    'RDY': 'PRONTO',
+    'DSP': 'SAIU_PARA_ENTREGA',
+    'CON': 'CONCLUIDO',
+    'CAN': 'CANCELADO',
   };
   return map[String(eventCode).toUpperCase()] || null;
 }
@@ -115,7 +127,7 @@ export async function processAiqfomeWebhook(eventId) {
 
       let orderData;
       try {
-        orderData = await aiqfomeGet(integrationId, `/orders/${orderId}`);
+        orderData = await aiqfomeGet(integrationId, `${ORDER_API}/orders/${orderId}`);
       } catch (e) {
         console.warn(`[aiqbridge] Failed to fetch order ${orderId}:`, e?.response?.data || e?.message);
         // Use payload as fallback
@@ -243,7 +255,7 @@ export async function processAiqfomeWebhook(eventId) {
       // Auto-accept
       if (autoAccept && initialStatus === 'PENDENTE_ACEITE') {
         try {
-          await aiqfomePost(integrationId, `/orders/${orderId}/confirm`, {});
+          await aiqfomePost(integrationId, `${ORDER_API}/orders/${orderId}/confirm`, {});
           await prisma.order.update({
             where: { id: savedOrder.id },
             data: { status: 'EM_PREPARO', histories: { create: { from: 'PENDENTE_ACEITE', to: 'EM_PREPARO', reason: 'aiqbridge auto-accept' } } },
