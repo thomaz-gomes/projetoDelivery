@@ -26,18 +26,23 @@ function pickMenuLink(links) {
 
 async function resolveCompany(merchantId) {
   const include = { menuLinks: { include: { menu: { select: { id: true, name: true, storeId: true } } } } };
+  const key = merchantId != null ? String(merchantId).trim() : null;
 
   let integ = null;
-  if (merchantId) {
-    const key = String(merchantId).trim();
+  if (key) {
     integ = await prisma.apiIntegration.findFirst({ where: { provider: 'AIQFOME', merchantId: key }, include });
   }
-  // Fallback: única integração AIQFOME (cobre merchantId ausente no cadastro)
+  // Sem match por merchantId (ex.: evento de teste usa merchant de amostra, ou
+  // merchantId não cadastrado): usa a integração AIQFOME mais recente — preferindo
+  // habilitadas — em vez de descartar o pedido.
   if (!integ) {
-    const all = await prisma.apiIntegration.findMany({ where: { provider: 'AIQFOME' }, include });
-    if (all.length === 1) integ = all[0];
+    const all = await prisma.apiIntegration.findMany({ where: { provider: 'AIQFOME' }, orderBy: { updatedAt: 'desc' }, include });
+    if (all.length) {
+      integ = all.find(i => i.enabled) || all[0];
+      console.warn(`[aiqbridge] merchantId ${key || '(ausente)'} sem match exato — usando fallback ${integ.id} de ${all.length} integração(ões)`);
+    }
   }
-  if (!integ) return null;
+  if (!integ) { console.warn('[aiqbridge] nenhuma integração AIQFOME cadastrada — pedido descartado'); return null; }
 
   // Roteamento por cardápio: integração → cardápio default → loja (mesma lógica
   // do iFood via applyMenuLinkRouting). Cai para storeId direto se não houver vínculo.
@@ -111,6 +116,7 @@ export async function processAiqfomeWebhook(eventId) {
 
     const externalId = String(orderId);
     const status = mapEventToStatus(eventType);
+    console.log('[aiqbridge] processando webhook:', { eventType, status, orderId: externalId, merchantId, companyId, storeId, menuId: routedMenuId });
 
     // Check if order exists
     const existingOrder = await prisma.order.findFirst({ where: { externalId, companyId } });

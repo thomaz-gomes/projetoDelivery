@@ -802,6 +802,33 @@ integrationsRouter.post('/aiqfome/webhook/test', requireRole('ADMIN'), async (re
   }
 });
 
+// Lista os últimos webhooks aiqfome recebidos + status de processamento.
+// Diagnóstico: mostra se o evento chegou e por que (não) virou pedido.
+integrationsRouter.get('/aiqfome/webhook/events', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const events = await prisma.webhookEvent.findMany({
+      where: { provider: 'AIQFOME' },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: { id: true, eventId: true, status: true, error: true, createdAt: true, processedAt: true, payload: true },
+    });
+    const rows = events.map(e => ({
+      eventId: e.eventId,
+      status: e.status,           // RECEIVED | PROCESSED | ERROR
+      error: e.error || null,
+      createdAt: e.createdAt,
+      processedAt: e.processedAt,
+      event: e.payload?.event || e.payload?.code || e.payload?.fullCode || null,
+      orderId: e.payload?.order_id || e.payload?.orderId || e.payload?.id || null,
+      merchantId: e.payload?.merchant_id || e.payload?.merchantId || null,
+    }));
+    res.json({ ok: true, events: rows });
+  } catch (e) {
+    console.error('[aiqbridge webhook/events] error:', e?.message);
+    res.status(500).json({ message: 'Falha ao listar eventos', error: e?.message || String(e) });
+  }
+});
+
 // ── aiqfome Payment Method Mappings ──
 
 const AIQFOME_DEFAULT_CODES = [

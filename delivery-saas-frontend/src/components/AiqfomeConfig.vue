@@ -218,6 +218,35 @@ async function inspectWebhook() {
   } finally { webhookInspecting.value = false; }
 }
 
+const webhookEventsLoading = ref(false);
+async function viewWebhookEvents() {
+  webhookEventsLoading.value = true;
+  try {
+    const { data } = await api.get('/integrations/aiqfome/webhook/events');
+    const evts = data.events || [];
+    const fmt = (d) => d ? new Date(d).toLocaleString('pt-BR') : '—';
+    const badge = (s) => s === 'PROCESSED' ? '🟢' : s === 'ERROR' ? '🔴' : '🟡';
+    const rows = evts.length
+      ? evts.map(e => `<tr>
+          <td style="white-space:nowrap">${fmt(e.createdAt)}</td>
+          <td>${badge(e.status)} ${e.status}</td>
+          <td>${e.event || '—'}</td>
+          <td>${e.merchantId || '—'}</td>
+          <td style="color:#dc3545">${e.error ? String(e.error).slice(0, 120) : ''}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="5">Nenhum evento recebido ainda.</td></tr>';
+    await Swal.fire({
+      title: 'Webhooks aiqfome recebidos',
+      html: `<div style="overflow:auto"><table style="width:100%;font-size:12px;text-align:left">
+        <thead><tr><th>Quando</th><th>Status</th><th>Evento</th><th>Merchant</th><th>Erro</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>`,
+      width: 760,
+    });
+  } catch (e) {
+    showStatus(errDetail(e, 'Falha ao listar eventos.'), 'danger');
+  } finally { webhookEventsLoading.value = false; }
+}
+
 // ── Payment mappings ──
 async function loadPaymentMappings(integId) {
   if (!integId) return; paymentIntegId.value = integId;
@@ -372,6 +401,10 @@ onMounted(async () => {
               <button class="btn btn-sm btn-outline-secondary" @click="testWebhook" :disabled="webhookTesting" title="Disparar evento de teste">
                 <span v-if="webhookTesting" class="spinner-border spinner-border-sm"></span>
                 <i v-else class="bi bi-send"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-secondary" @click="viewWebhookEvents" :disabled="webhookEventsLoading" title="Ver webhooks recebidos">
+                <span v-if="webhookEventsLoading" class="spinner-border spinner-border-sm"></span>
+                <i v-else class="bi bi-list-check"></i>
               </button>
               <button class="btn btn-sm btn-outline-secondary" @click="copyWebhook" title="Copiar"><i class="bi bi-clipboard"></i></button>
             </div>
