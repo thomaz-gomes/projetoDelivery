@@ -161,6 +161,12 @@ async function saveMenuLinks(integ) {
   } finally { savingMenus.value = false; }
 }
 
+// Extrai a causa real (mensagem + detalhe do erro da bridge) para o usuário.
+function errDetail(e, fallback) {
+  const d = e?.response?.data || {};
+  return [d.message, d.error].filter(Boolean).join(' — ') || e?.message || fallback;
+}
+
 // ── Webhook config ──
 const webhookConfiguring = ref('');
 async function configureWebhook(integ) {
@@ -171,7 +177,7 @@ async function configureWebhook(integ) {
       ? 'Webhook registrado e assinatura ativada!'
       : 'Webhook registrado (sem secret retornado — verifique no aiqbridge).', 'success');
   } catch (e) {
-    showStatus(e?.response?.data?.message || 'Falha ao configurar webhook.', 'danger');
+    showStatus(errDetail(e, 'Falha ao configurar webhook.'), 'danger');
   } finally { webhookConfiguring.value = ''; }
 }
 
@@ -182,7 +188,7 @@ async function testWebhook() {
     await api.post('/integrations/aiqfome/webhook/test');
     showStatus('Evento de teste disparado. Veja se o pedido aparece e confira o log OUT no aiqbridge.', 'success');
   } catch (e) {
-    showStatus(e?.response?.data?.message || 'Falha ao disparar evento de teste.', 'danger');
+    showStatus(errDetail(e, 'Falha ao disparar evento de teste.'), 'danger');
   } finally { webhookTesting.value = false; }
 }
 
@@ -198,7 +204,7 @@ async function inspectWebhook() {
       width: 600,
     });
   } catch (e) {
-    showStatus(e?.response?.data?.message || 'Falha ao consultar a config do webhook.', 'danger');
+    showStatus(errDetail(e, 'Falha ao consultar a config do webhook.'), 'danger');
   } finally { webhookInspecting.value = false; }
 }
 
@@ -248,7 +254,7 @@ onMounted(async () => {
 
 <template>
   <div class="container py-4">
-    <div class="d-flex align-items-center justify-content-between mb-4">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
       <div class="d-flex align-items-center gap-3">
         <img src="https://aiqfome.com/favicon.ico" alt="aiqfome" style="height:36px" />
         <div>
@@ -256,7 +262,7 @@ onMounted(async () => {
           <small class="text-muted">via aiqbridge</small>
         </div>
       </div>
-      <span v-if="integrations.some(i => isActive(i))" class="badge bg-success fs-6 px-3 py-2">
+      <span v-if="integrations.some(i => isActive(i))" class="badge bg-success px-3 py-2">
         {{ integrations.filter(i => isActive(i)).length }} loja(s) conectada(s)
       </span>
     </div>
@@ -293,7 +299,7 @@ onMounted(async () => {
                       <label class="form-check-label small">Aceite automático</label>
                     </div>
                   </div>
-                  <div class="d-flex gap-2">
+                  <div class="d-flex flex-wrap gap-2">
                     <div v-if="isActive(integ)" class="btn-group">
                       <button class="btn btn-sm btn-outline-success" @click="storeAction(integ, 'open')" :disabled="!!storeActionLoading" title="Abrir"><i class="bi bi-shop"></i></button>
                       <button class="btn btn-sm btn-outline-danger" @click="storeAction(integ, 'close')" :disabled="!!storeActionLoading" title="Fechar"><i class="bi bi-shop-window"></i></button>
@@ -342,11 +348,11 @@ onMounted(async () => {
 
         <!-- Webhook URL -->
         <div v-if="integrations.length > 0" class="card mb-3">
-          <div class="card-body py-2 d-flex align-items-center gap-2">
+          <div class="card-body py-2 d-flex align-items-center flex-wrap gap-2">
             <i class="bi bi-globe text-primary"></i>
-            <div>
+            <div class="flex-grow-1" style="min-width:0">
               <div class="small text-muted">URL do Webhook — use <strong>Registrar webhook</strong> acima para configurar automaticamente, ou cole no dashboard aiqbridge</div>
-              <code class="small user-select-all">{{ webhookUrl }}</code>
+              <code class="small user-select-all" style="word-break:break-all">{{ webhookUrl }}</code>
             </div>
             <div class="ms-auto d-flex gap-1">
               <button class="btn btn-sm btn-outline-secondary" @click="inspectWebhook" :disabled="webhookInspecting" title="Ver config registrada no aiqbridge">

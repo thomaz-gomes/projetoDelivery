@@ -700,9 +700,11 @@ integrationsRouter.post('/aiqfome/webhook/config', requireRole('ADMIN'), async (
     const companyId = req.user.companyId;
     const { integrationId, webhookUrl } = req.body || {};
 
+    // select explícito (sem webhookSecret) p/ não quebrar se a migração ainda não rodou
+    const intgSelect = { id: true, accessToken: true, merchantId: true };
     const integ = integrationId
-      ? await prisma.apiIntegration.findFirst({ where: { id: integrationId, companyId, provider: 'AIQFOME' } })
-      : await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'AIQFOME' }, orderBy: { updatedAt: 'desc' } });
+      ? await prisma.apiIntegration.findFirst({ where: { id: integrationId, companyId, provider: 'AIQFOME' }, select: intgSelect })
+      : await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'AIQFOME' }, orderBy: { updatedAt: 'desc' }, select: intgSelect });
     if (!integ) return res.status(404).json({ message: 'sem integração aiqfome' });
     if (!integ.accessToken) return res.status(400).json({ message: 'Conecte o token do aiqbridge antes de configurar o webhook.' });
 
@@ -736,16 +738,19 @@ integrationsRouter.post('/aiqfome/webhook/config', requireRole('ADMIN'), async (
       console.warn('[aiqbridge webhook/config] GET pós-registro falhou:', e?.response?.data || e?.message);
     }
 
-    await prisma.apiIntegration.update({
-      where: { id: integ.id },
-      data: {
-        webhookSecret: secret || integ.webhookSecret || null,
-        // Captura o merchantId da bridge — essencial para rotear webhooks à loja certa.
-        merchantId: integ.merchantId || (merchantFromCfg != null ? String(merchantFromCfg) : null),
-      },
-    });
+    const merchantId = integ.merchantId || (merchantFromCfg != null ? String(merchantFromCfg) : null);
+    // Tenta gravar o secret; se a coluna webhookSecret ainda não existir (migração
+    // pendente), grava ao menos o merchantId para o roteamento funcionar.
+    let secretStored = false;
+    try {
+      await prisma.apiIntegration.update({ where: { id: integ.id }, data: { webhookSecret: secret || null, merchantId } });
+      secretStored = !!secret;
+    } catch (e) {
+      console.warn('[aiqbridge webhook/config] update c/ webhookSecret falhou (coluna ausente?), gravando só merchantId:', e?.message);
+      await prisma.apiIntegration.update({ where: { id: integ.id }, data: { merchantId } }).catch(() => {});
+    }
 
-    res.json({ ok: true, registered: true, secretCaptured: !!secret, enabled, webhookUrl: url });
+    res.json({ ok: true, registered: true, secretCaptured: secretStored, enabled, webhookUrl: url });
   } catch (e) {
     console.error('[aiqbridge webhook/config] error:', e?.response?.data || e?.message);
     res.status(500).json({ message: 'Falha ao registrar webhook no aiqbridge', error: e?.response?.data?.message || e?.message || String(e) });
@@ -757,12 +762,12 @@ integrationsRouter.post('/aiqfome/webhook/config', requireRole('ADMIN'), async (
 integrationsRouter.get('/aiqfome/webhook/config', requireRole('ADMIN'), async (req, res) => {
   try {
     const companyId = req.user.companyId;
-    const integ = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'AIQFOME' }, orderBy: { updatedAt: 'desc' } });
+    const integ = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'AIQFOME' }, orderBy: { updatedAt: 'desc' }, select: { id: true, accessToken: true } });
     if (!integ) return res.status(404).json({ message: 'sem integração aiqfome' });
     if (!integ.accessToken) return res.status(400).json({ message: 'Conecte o token do aiqbridge primeiro.' });
 
     const config = await aiqfomeGet(integ.id, '/ifood/order/v1.0/webhook/config');
-    res.json({ ok: true, config, hasSecret: !!integ.webhookSecret });
+    res.json({ ok: true, config, hasSecret: !!config?.secret_key });
   } catch (e) {
     console.error('[aiqbridge webhook/config GET] error:', e?.response?.data || e?.message);
     res.status(500).json({ message: 'Falha ao consultar webhook no aiqbridge', error: e?.response?.data?.message || e?.message || String(e) });
@@ -774,7 +779,7 @@ integrationsRouter.get('/aiqfome/webhook/config', requireRole('ADMIN'), async (r
 integrationsRouter.post('/aiqfome/webhook/test', requireRole('ADMIN'), async (req, res) => {
   try {
     const companyId = req.user.companyId;
-    const integ = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'AIQFOME' }, orderBy: { updatedAt: 'desc' } });
+    const integ = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'AIQFOME' }, orderBy: { updatedAt: 'desc' }, select: { id: true, accessToken: true } });
     if (!integ) return res.status(404).json({ message: 'sem integração aiqfome' });
     if (!integ.accessToken) return res.status(400).json({ message: 'Conecte o token do aiqbridge primeiro.' });
 
