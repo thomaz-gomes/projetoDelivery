@@ -443,7 +443,7 @@ onUnmounted(() => { clearRefreshTimers(); });
 </script>
 
 <template>
-  <div>
+  <div class="container py-4">
     <!-- Header -->
     <div class="d-flex align-items-center justify-content-between mb-4">
       <div class="d-flex align-items-center gap-3">
@@ -716,11 +716,11 @@ onUnmounted(() => { clearRefreshTimers(); });
       <!-- Integration selector (if multiple) -->
       <div v-if="integrations.length > 1" class="mb-3" style="max-width:400px">
         <label class="form-label small fw-semibold">Integração</label>
-        <select class="form-select" :value="paymentIntegId" @change="loadPaymentMappings($event.target.value)">
+        <SelectInput :modelValue="paymentIntegId" @update:modelValue="loadPaymentMappings">
           <option v-for="integ in integrations" :key="integ.id" :value="integ.id">
             {{ storeName(integ) }} {{ isActive(integ) ? '(Conectado)' : '(Desconectado)' }}
           </option>
-        </select>
+        </SelectInput>
       </div>
 
       <div v-if="paymentMsg" :class="['alert py-2 small', `alert-${paymentMsgType}`]" role="alert">{{ paymentMsg }}</div>
@@ -846,10 +846,10 @@ onUnmounted(() => { clearRefreshTimers(); });
       <!-- Seletor de Loja -->
       <div class="mb-4" style="max-width:400px">
         <label class="form-label fw-semibold">Loja</label>
-        <select class="form-select" v-model="chatStoreId" @change="loadChatMessages">
+        <SelectInput v-model="chatStoreId" @update:modelValue="loadChatMessages">
           <option value="">Selecione a loja...</option>
           <option v-for="s in stores" :key="s.id" :value="s.id">{{ s.name }}</option>
-        </select>
+        </SelectInput>
       </div>
 
       <div v-if="!chatStoreId" class="text-muted text-center py-3">
@@ -870,7 +870,7 @@ onUnmounted(() => { clearRefreshTimers(); });
             </div>
           </div>
           <div class="card-body">
-            <textarea class="form-control" v-model="msg.message" rows="3"></textarea>
+            <TextareaInput v-model="msg.message" :rows="3" />
             <button class="btn btn-sm btn-outline-success mt-2" @click="saveChatMessage(msg)" :disabled="chatSaving">
               <i class="bi bi-check-lg me-1"></i>Salvar
             </button>
