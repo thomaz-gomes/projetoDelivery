@@ -176,7 +176,7 @@ onMounted(loadAll);
 </script>
 
 <template>
-  <div>
+  <div class="container py-4">
     <!-- Header -->
     <div class="d-flex align-items-center justify-content-between mb-4">
       <div class="d-flex align-items-center gap-3">
