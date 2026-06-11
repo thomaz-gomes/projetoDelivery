@@ -1,6 +1,6 @@
 {
   "name": "delivery-ifood-agent",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Agente Electron que envia mensagens automáticas no chat do iFood Gestor de Pedidos",
   "main": "main.js",
   "scripts": {
