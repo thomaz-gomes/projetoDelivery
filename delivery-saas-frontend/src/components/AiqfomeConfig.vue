@@ -181,11 +181,19 @@ async function configureWebhook(integ) {
   } finally { webhookConfiguring.value = ''; }
 }
 
+// Integração exibida (conectada) — usada para mirar inspect/test na correta.
+function targetIntegId() {
+  const i = integrations.value.find(x => isActive(x)) || integrations.value[0];
+  return i?.id || null;
+}
+
 const webhookTesting = ref(false);
 async function testWebhook() {
+  const id = targetIntegId();
+  if (!id) { showStatus('Nenhuma integração aiqfome conectada.', 'danger'); return; }
   webhookTesting.value = true;
   try {
-    await api.post('/integrations/aiqfome/webhook/test');
+    await api.post('/integrations/aiqfome/webhook/test', { integrationId: id });
     showStatus('Evento de teste disparado. Veja se o pedido aparece e confira o log OUT no aiqbridge.', 'success');
   } catch (e) {
     showStatus(errDetail(e, 'Falha ao disparar evento de teste.'), 'danger');
@@ -194,9 +202,11 @@ async function testWebhook() {
 
 const webhookInspecting = ref(false);
 async function inspectWebhook() {
+  const id = targetIntegId();
+  if (!id) { showStatus('Nenhuma integração aiqfome conectada.', 'danger'); return; }
   webhookInspecting.value = true;
   try {
-    const { data } = await api.get('/integrations/aiqfome/webhook/config');
+    const { data } = await api.get('/integrations/aiqfome/webhook/config', { params: { integrationId: id } });
     await Swal.fire({
       title: 'Webhook registrado no aiqbridge',
       html: `<pre style="text-align:left;white-space:pre-wrap;font-size:12px">${JSON.stringify(data.config, null, 2)}</pre>

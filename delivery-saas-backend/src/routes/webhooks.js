@@ -759,16 +759,24 @@ webhooksRouter.post('/aiqfome', async (req, res) => {
       hasSignature: !!(req.headers['x-signature'] || req.headers['x-aiqbridge-signature']),
     });
 
-    // 🔐 Verifica assinatura HMAC quando um secret estiver configurado
+    // 🔐 Validação de assinatura HMAC.
+    // Por padrão é NÃO bloqueante (fail-open): loga divergência mas processa o
+    // pedido — evita perder pedidos enquanto o esquema de assinatura da bridge
+    // não está 100% confirmado (ex.: evento de teste pode vir sem assinatura).
+    // Defina AIQFOME_ENFORCE_SIGNATURE=1 para rejeitar (401) quando inválida.
     const sigHeader = req.headers['x-signature'] || req.headers['x-aiqbridge-signature'] || '';
     const secret = await resolveAiqfomeSecret(payload);
     const sig = verifyAiqfomeSignature(req.rawBody, secret, sigHeader);
     if (!sig.ok) {
-      console.warn('[aiqfome webhook] assinatura X-Signature inválida — rejeitando');
-      return res.status(401).json({ error: 'invalid signature' });
-    }
-    if (sig.skipped) {
-      console.warn('[aiqfome webhook] sem webhookSecret configurado — assinatura NÃO verificada. Registre o webhook para ativar a validação.');
+      // Loga os nomes de headers de assinatura recebidos p/ descobrir o esquema real.
+      const sigHeaders = Object.keys(req.headers).filter(h => /sign|hmac|signature/i.test(h));
+      if (process.env.AIQFOME_ENFORCE_SIGNATURE === '1') {
+        console.warn('[aiqfome webhook] assinatura inválida — rejeitando (enforce on). Headers:', sigHeaders);
+        return res.status(401).json({ error: 'invalid signature' });
+      }
+      console.warn('[aiqfome webhook] assinatura ausente/divergente — processando mesmo assim (enforce off). Headers de assinatura vistos:', sigHeaders);
+    } else if (sig.skipped) {
+      console.warn('[aiqfome webhook] sem webhookSecret configurado — assinatura NÃO verificada.');
     }
 
     const order = payload.data || payload;

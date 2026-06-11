@@ -692,6 +692,18 @@ integrationsRouter.post('/aiqfome/unlink', requireRole('ADMIN'), async (req, res
   }
 });
 
+// aiqbridge usa JWT (3 segmentos). Detecta token claramente inválido para dar
+// uma mensagem clara em vez do "invalid_token: Not enough segments" cru da bridge.
+function isLikelyJwt(t) { return typeof t === 'string' && t.trim().split('.').length === 3; }
+const INVALID_TOKEN_MSG = 'Token aiqbridge inválido (não é um JWT). Reconecte colando o token do dashboard aiqbridge.';
+
+// Resolve a integração aiqfome alvo: por id (preferido) ou a mais recente.
+async function findAiqfomeIntegration(companyId, integrationId) {
+  const select = { id: true, accessToken: true, merchantId: true };
+  if (integrationId) return prisma.apiIntegration.findFirst({ where: { id: integrationId, companyId, provider: 'AIQFOME' }, select });
+  return prisma.apiIntegration.findFirst({ where: { companyId, provider: 'AIQFOME' }, orderBy: { updatedAt: 'desc' }, select });
+}
+
 // Register the webhook URL with aiqbridge and capture the signing secret.
 // aiqbridge returns secret_key only once (on registration); we persist it so
 // the /webhooks/aiqfome handler can validate the X-Signature HMAC.
@@ -700,13 +712,10 @@ integrationsRouter.post('/aiqfome/webhook/config', requireRole('ADMIN'), async (
     const companyId = req.user.companyId;
     const { integrationId, webhookUrl } = req.body || {};
 
-    // select explícito (sem webhookSecret) p/ não quebrar se a migração ainda não rodou
-    const intgSelect = { id: true, accessToken: true, merchantId: true };
-    const integ = integrationId
-      ? await prisma.apiIntegration.findFirst({ where: { id: integrationId, companyId, provider: 'AIQFOME' }, select: intgSelect })
-      : await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'AIQFOME' }, orderBy: { updatedAt: 'desc' }, select: intgSelect });
+    const integ = await findAiqfomeIntegration(companyId, integrationId);
     if (!integ) return res.status(404).json({ message: 'sem integração aiqfome' });
     if (!integ.accessToken) return res.status(400).json({ message: 'Conecte o token do aiqbridge antes de configurar o webhook.' });
+    if (!isLikelyJwt(integ.accessToken)) return res.status(400).json({ message: INVALID_TOKEN_MSG });
 
     // Frontend computes the public URL (app./api. domain aware). Validate it.
     const url = String(webhookUrl || '').trim();
@@ -762,9 +771,10 @@ integrationsRouter.post('/aiqfome/webhook/config', requireRole('ADMIN'), async (
 integrationsRouter.get('/aiqfome/webhook/config', requireRole('ADMIN'), async (req, res) => {
   try {
     const companyId = req.user.companyId;
-    const integ = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'AIQFOME' }, orderBy: { updatedAt: 'desc' }, select: { id: true, accessToken: true } });
+    const integ = await findAiqfomeIntegration(companyId, req.query.integrationId);
     if (!integ) return res.status(404).json({ message: 'sem integração aiqfome' });
     if (!integ.accessToken) return res.status(400).json({ message: 'Conecte o token do aiqbridge primeiro.' });
+    if (!isLikelyJwt(integ.accessToken)) return res.status(400).json({ message: INVALID_TOKEN_MSG });
 
     const config = await aiqfomeGet(integ.id, '/ifood/order/v1.0/webhook/config');
     res.json({ ok: true, config, hasSecret: !!config?.secret_key });
@@ -779,9 +789,10 @@ integrationsRouter.get('/aiqfome/webhook/config', requireRole('ADMIN'), async (r
 integrationsRouter.post('/aiqfome/webhook/test', requireRole('ADMIN'), async (req, res) => {
   try {
     const companyId = req.user.companyId;
-    const integ = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'AIQFOME' }, orderBy: { updatedAt: 'desc' }, select: { id: true, accessToken: true } });
+    const integ = await findAiqfomeIntegration(companyId, req.body?.integrationId);
     if (!integ) return res.status(404).json({ message: 'sem integração aiqfome' });
     if (!integ.accessToken) return res.status(400).json({ message: 'Conecte o token do aiqbridge primeiro.' });
+    if (!isLikelyJwt(integ.accessToken)) return res.status(400).json({ message: INVALID_TOKEN_MSG });
 
     const result = await aiqfomePost(integ.id, '/ifood/order/v1.0/webhook/config/test', {});
     res.json({ ok: true, result });
