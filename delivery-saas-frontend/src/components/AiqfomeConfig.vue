@@ -235,11 +235,14 @@ async function viewWebhookEvents() {
           <td style="color:#dc3545">${e.error ? String(e.error).slice(0, 120) : ''}</td>
         </tr>`).join('')
       : '<tr><td colspan="5">Nenhum evento recebido ainda.</td></tr>';
+    const latestPayload = evts[0]?.payload ? JSON.stringify(evts[0].payload, null, 2) : '(sem eventos)';
     await Swal.fire({
       title: 'Webhooks aiqfome recebidos',
       html: `<div style="overflow:auto"><table style="width:100%;font-size:12px;text-align:left">
         <thead><tr><th>Quando</th><th>Status</th><th>Evento</th><th>Merchant</th><th>Erro</th></tr></thead>
-        <tbody>${rows}</tbody></table></div>`,
+        <tbody>${rows}</tbody></table></div>
+        <details style="text-align:left;margin-top:10px"><summary style="cursor:pointer">Ver payload do evento mais recente</summary>
+        <pre style="white-space:pre-wrap;font-size:11px;max-height:240px;overflow:auto">${latestPayload.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</pre></details>`,
       width: 760,
     });
   } catch (e) {

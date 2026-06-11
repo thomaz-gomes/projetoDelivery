@@ -17,6 +17,39 @@ const ORDER_API = '/ifood/order/v1.0';
 /**
  * Resolve companyId from merchantId in ApiIntegration
  */
+// Extração tolerante: a bridge pode aninhar (data/order) ou usar nomes variados.
+function firstVal(...vals) { return vals.find(v => v != null && v !== '') ?? null; }
+
+function extractOrderId(p) {
+  const d = p?.data || {};
+  const o = p?.order || d?.order || {};
+  return firstVal(
+    p?.order_id, p?.orderId, p?.id,
+    d?.order_id, d?.orderId, d?.id,
+    o?.id, o?.order_id, o?.orderId,
+    p?.orderExternalId, p?.order_external_id, p?.reference,
+    p?.correlationId, p?.correlation_id, d?.correlationId,
+  );
+}
+
+function extractEventCode(p) {
+  const d = p?.data || {};
+  return firstVal(
+    p?.event, p?.fullCode, p?.code, p?.type, p?.event_type, p?.eventType,
+    d?.event, d?.code, d?.fullCode, d?.type,
+  ) || 'NEW_ORDER';
+}
+
+function extractMerchantId(p) {
+  const d = p?.data || {};
+  const o = p?.order || d?.order || {};
+  return firstVal(
+    p?.merchant_id, p?.merchantId,
+    d?.merchant_id, d?.merchantId,
+    o?.merchant_id, o?.merchantId, o?.merchant?.id,
+  );
+}
+
 // Escolhe o vínculo de cardápio default (ou o único), como no iFood.
 function pickMenuLink(links) {
   const arr = Array.isArray(links) ? links : [];
@@ -103,11 +136,15 @@ export async function processAiqfomeWebhook(eventId) {
 
   try {
     const payload = evt.payload;
-    const eventType = payload?.event || payload?.fullCode || payload?.code || 'NEW_ORDER';
-    const orderId = payload?.order_id || payload?.orderId || payload?.id;
-    const merchantId = payload?.merchant_id || payload?.merchantId;
+    const orderId = extractOrderId(payload);
+    const eventType = extractEventCode(payload);
+    const merchantId = extractMerchantId(payload);
 
-    if (!orderId) throw new Error('Payload sem order_id');
+    if (!orderId) {
+      // Loga as chaves do payload p/ descobrir onde a bridge põe o id do pedido.
+      console.warn('[aiqbridge] payload sem order_id. Chaves top-level:', Object.keys(payload || {}), 'data:', Object.keys(payload?.data || {}), 'order:', Object.keys(payload?.order || {}));
+      throw new Error('Payload sem order_id');
+    }
 
     // Resolve company
     const resolved = await resolveCompany(merchantId);

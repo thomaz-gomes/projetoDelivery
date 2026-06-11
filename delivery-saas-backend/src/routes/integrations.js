@@ -821,6 +821,7 @@ integrationsRouter.get('/aiqfome/webhook/events', requireRole('ADMIN'), async (r
       event: e.payload?.event || e.payload?.code || e.payload?.fullCode || null,
       orderId: e.payload?.order_id || e.payload?.orderId || e.payload?.id || null,
       merchantId: e.payload?.merchant_id || e.payload?.merchantId || null,
+      payload: e.payload || null,
     }));
     res.json({ ok: true, events: rows });
   } catch (e) {
