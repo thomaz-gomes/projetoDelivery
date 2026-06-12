@@ -22,6 +22,7 @@ import OnboardingWizard from './components/OnboardingWizard.vue';
 import PurchaseImportModal from './components/PurchaseImportModal.vue';
 import LuccaChat from './components/LuccaChat.vue';
 import { useBarcodeScanner } from './composables/useBarcodeScanner.js';
+import * as bootstrap from 'bootstrap';
 
 const mobileOpen = ref(false);
 const auth = useAuthStore();
@@ -42,6 +43,16 @@ scanner.onScan((digits) => {
 function onScannerModalClose() {
   scannerImportOpen.value = false
   scannerAccessKey.value = null
+}
+
+// Fecha o offcanvas mobile ao navegar por um link.
+// Não usar data-bs-dismiss em <a>: o handler delegado do Bootstrap roda em
+// capture phase e chama preventDefault antes do router-link, abortando a navegação.
+function closeMobileNav() {
+  try {
+    const el = document.getElementById('appSidebar')
+    if (el) bootstrap.Offcanvas.getOrCreateInstance(el).hide()
+  } catch (e) { /* ignore */ }
 }
 const saas = useSaasStore();
 const modules = useModulesStore();
@@ -406,12 +417,12 @@ function goToRiderQr(){
                           <div class="fw-bold text-dark"><i :class="item.icon + ' me-2'"></i>{{ item.name }}</div>
                           <ul class="list-unstyled ms-3">
                             <li v-for="child in item.children" :key="child.to">
-                              <router-link :to="child.to" class=" d-flex align-items-center" data-bs-dismiss="offcanvas"><i :class="child.icon + ' me-2'"></i>{{ child.name }}</router-link>
+                              <router-link :to="child.to" class=" d-flex align-items-center" @click="closeMobileNav"><i :class="child.icon + ' me-2'"></i>{{ child.name }}</router-link>
                             </li>
                           </ul>
                         </template>
                         <template v-else>
-                          <router-link :to="item.to" class="d-block py-1 text-dark d-flex align-items-center" data-bs-dismiss="offcanvas"><i :class="item.icon + ' me-2'"></i>{{ item.name }}<span v-if="item.to === '/billing' && addOnStore.pendingInvoiceCount" class="badge bg-danger ms-auto">{{ addOnStore.pendingInvoiceCount }}</span></router-link>
+                          <router-link :to="item.to" class="d-block py-1 text-dark d-flex align-items-center" @click="closeMobileNav"><i :class="item.icon + ' me-2'"></i>{{ item.name }}<span v-if="item.to === '/billing' && addOnStore.pendingInvoiceCount" class="badge bg-danger ms-auto">{{ addOnStore.pendingInvoiceCount }}</span></router-link>
                         </template>
                   </li>
                 </ul>
