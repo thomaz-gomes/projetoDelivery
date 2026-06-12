@@ -665,8 +665,25 @@ integrationsRouter.post('/aiqfome/link/start', requireRole('ADMIN'), async (req,
     const menu = await prisma.menu.findFirst({ where: { id: menuId, store: { companyId } }, select: { id: true, storeId: true } });
     if (!menu) return res.status(400).json({ message: 'Cardápio inválido ou não pertence à empresa' });
 
-    const integ = await saveAiqbridgeToken({ companyId, storeId: menu.storeId, token, merchantId });
-    // 1 cardápio por integração (default) — substitui qualquer vínculo anterior.
+    // Cada cardápio pode ter UMA integração AIQFOME. Casa pelo vínculo do cardápio
+    // (não por storeId) para não substituir a integração de outro cardápio da mesma loja.
+    const existingLink = await prisma.apiIntegrationMenu.findFirst({
+      where: { menuId: menu.id, integration: { companyId, provider: 'AIQFOME' } },
+      select: { integrationId: true },
+    });
+
+    let integ;
+    if (existingLink) {
+      integ = await prisma.apiIntegration.update({
+        where: { id: existingLink.integrationId },
+        data: { accessToken: token, merchantId: merchantId || null, storeId: menu.storeId, enabled: true },
+      });
+    } else {
+      integ = await prisma.apiIntegration.create({
+        data: { companyId, provider: 'AIQFOME', accessToken: token, merchantId: merchantId || null, storeId: menu.storeId, enabled: true },
+      });
+    }
+    // Garante o vínculo (1 cardápio default) sem tocar nas demais integrações.
     await syncIntegrationMenus(integ.id, companyId, [menu.id], menu.id);
     res.json({ ok: true, integrationId: integ.id });
   } catch (e) {
@@ -679,7 +696,12 @@ integrationsRouter.post('/aiqfome/link/start', requireRole('ADMIN'), async (req,
 integrationsRouter.post('/aiqfome/unlink', requireRole('ADMIN'), async (req, res) => {
   try {
     const companyId = req.user.companyId;
-    const which = await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'AIQFOME' }, orderBy: { updatedAt: 'desc' } });
+    const { integrationId } = req.body || {};
+    // Honra o integrationId (há várias integrações — uma por cardápio); só cai
+    // para a mais recente quando nenhum id é informado.
+    const which = integrationId
+      ? await prisma.apiIntegration.findFirst({ where: { id: integrationId, companyId, provider: 'AIQFOME' } })
+      : await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'AIQFOME' }, orderBy: { updatedAt: 'desc' } });
     if (!which) return res.status(404).json({ message: 'sem integração aiqfome' });
     const i = await prisma.apiIntegration.update({
       where: { id: which.id },
@@ -936,10 +958,10 @@ integrationsRouter.post('/aiqfome/store/:action', requireRole('ADMIN'), async (r
       return res.status(400).json({ message: 'action deve ser open, close ou standby' });
     }
 
-    const integration = await prisma.apiIntegration.findFirst({
-      where: { companyId, provider: 'AIQFOME', enabled: true },
-      orderBy: { updatedAt: 'desc' },
-    });
+    const { integrationId } = req.body || {};
+    const integration = integrationId
+      ? await prisma.apiIntegration.findFirst({ where: { id: integrationId, companyId, provider: 'AIQFOME', enabled: true } })
+      : await prisma.apiIntegration.findFirst({ where: { companyId, provider: 'AIQFOME', enabled: true }, orderBy: { updatedAt: 'desc' } });
     if (!integration) return res.status(404).json({ message: 'sem integração aiqfome ativa' });
 
     // aiqbridge uses iFood-compatible merchant status endpoint

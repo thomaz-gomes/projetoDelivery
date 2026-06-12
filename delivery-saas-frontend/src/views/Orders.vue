@@ -162,8 +162,19 @@ function destroyIfoodWidget() {
   try { delete window.iFoodWidget; } catch (e) {}
 }
 
+function isAiqfomeOrder(o) {
+  if (!o) return false;
+  return (
+    o.customerSource === 'AIQFOME' ||
+    o.payload?.provider === 'AIQFOME' ||
+    o.payload?.salesChannel === 'AIQFOME'
+  );
+}
+
 function isIfoodOrder(o) {
   if (!o) return false;
+  // aiqfome usa payload iFood-compatível (tem `merchant`), então excluímos antes.
+  if (isAiqfomeOrder(o)) return false;
   return (
     o.payload?.provider === 'IFOOD' ||
     o.payload?.order?.salesChannel === 'IFOOD' ||
@@ -3729,7 +3740,10 @@ function pulseButton() {
                     <span class="oc-total">{{ formatCurrency(storeRevenue(o)) }}</span>
                   </span></div>
                 <div class="oc-footer">
-                  <span v-if="isIfoodOrder(o)" title="Pedido iFood">
+                  <span v-if="isAiqfomeOrder(o)" title="Pedido aiqfome">
+                    <img src="https://aiqfome.com/favicon.ico" alt="aiqfome" style="width:24px;height:24px;object-fit:contain;margin-right:4px;vertical-align:-2px;" />
+                  </span>
+                  <span v-else-if="isIfoodOrder(o)" title="Pedido iFood">
                     <img src="https://logodownload.org/wp-content/uploads/2017/05/ifood-logo-0.png" alt="iFood" style="width:24px;height:24px;object-fit:contain;margin-right:4px;vertical-align:-2px;" />
                     <span v-if="o.status === 'CONCLUIDO' && normalizeOrder(o).closedByIfoodCode" class="badge bg-success ms-1" style="font-size:0.65rem;">com código</span>
                   </span>
