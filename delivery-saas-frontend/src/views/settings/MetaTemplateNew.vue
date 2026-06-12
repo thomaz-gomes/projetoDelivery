@@ -48,6 +48,132 @@ const BUTTON_TYPES = [
   { value: 'PHONE_NUMBER', label: 'Telefone' },
 ]
 
+// Legenda de variáveis dos templates do sistema. A ordem das variáveis
+// {{1}}, {{2}}... bate com TEMPLATE_PARAM_BUILDERS em backend/services/notify.js.
+// Se mudar aqui, mude lá também — ou o cliente vai receber valores trocados.
+// Bodies de exemplo vêm de backend/messaging/templates/defaultsCatalog.js
+// (use o botão "Criar templates padrão" na lista se quiser que o sistema crie
+// e mapeie tudo automaticamente).
+const NOTIFICATION_LEGEND = [
+  {
+    type: 'ORDER_SUMMARY',
+    label: 'Resumo do pedido (criação)',
+    vars: [
+      { n: 1, hint: 'nome do cliente' },
+      { n: 2, hint: 'nº do pedido (ex: #77)' },
+      { n: 3, hint: 'nome da loja' },
+    ],
+    example:
+      'Olá {{1}}! 🎉\n\n' +
+      'Seu pedido {{2}} no *{{3}}* foi recebido com sucesso.\n' +
+      'Em instantes começamos a preparar. Te aviso quando atualizar o status!',
+  },
+  {
+    type: 'CONFIRMACAO_PAGAMENTO',
+    label: 'Confirmação de pagamento',
+    vars: [
+      { n: 1, hint: 'nome do cliente' },
+      { n: 2, hint: 'nº do pedido' },
+      { n: 3, hint: 'nome da loja' },
+    ],
+    example:
+      'Olá {{1}}! ✅\n\n' +
+      'Recebemos o pagamento do seu pedido {{2}} no *{{3}}*.\n' +
+      'Já vamos começar a preparar. 🍔',
+  },
+  {
+    type: 'EM_PREPARO',
+    label: 'Pedido em preparo',
+    vars: [
+      { n: 1, hint: 'nome do cliente' },
+      { n: 2, hint: 'nº do pedido' },
+      { n: 3, hint: 'nome da loja' },
+    ],
+    example:
+      'Olá {{1}}! 👨‍🍳\n\n' +
+      'Seu pedido {{2}} no *{{3}}* está em preparo.\n' +
+      'Te aviso assim que sair pra entrega!',
+  },
+  {
+    type: 'SAIU_PARA_ENTREGA',
+    label: 'Saiu para entrega',
+    vars: [
+      { n: 1, hint: 'nome do cliente' },
+      { n: 2, hint: 'nº do pedido' },
+      { n: 3, hint: 'nome da loja' },
+    ],
+    example:
+      '{{1}}, seu pedido {{2}} no *{{3}}* saiu para entrega! 🛵\n\n' +
+      'Fica atento(a) — em alguns minutos chega aí.',
+  },
+  {
+    type: 'CONCLUIDO',
+    label: 'Pedido entregue',
+    vars: [
+      { n: 1, hint: 'nome do cliente' },
+      { n: 2, hint: 'nº do pedido' },
+      { n: 3, hint: 'nome da loja' },
+    ],
+    example:
+      '{{1}}, seu pedido {{2}} no *{{3}}* foi entregue! 🎉\n\n' +
+      'Esperamos que tenha gostado. Obrigado pela preferência!',
+  },
+  {
+    type: 'CANCELADO',
+    label: 'Pedido cancelado',
+    vars: [
+      { n: 1, hint: 'nome do cliente' },
+      { n: 2, hint: 'nº do pedido' },
+      { n: 3, hint: 'nome da loja' },
+    ],
+    example:
+      '{{1}}, seu pedido {{2}} no *{{3}}* foi cancelado.\n\n' +
+      'Se tiver dúvidas ou precisar de ajuda, é só responder essa mensagem.',
+  },
+  {
+    type: 'RIDER_ASSIGNED',
+    label: 'Mensagem ao entregador',
+    vars: [
+      { n: 1, hint: 'nº do pedido' },
+      { n: 2, hint: 'nome do cliente' },
+      { n: 3, hint: 'endereço completo' },
+      { n: 4, hint: 'link do mapa' },
+    ],
+    example:
+      '🛵 Nova entrega\n\n' +
+      'Pedido: {{1}}\n' +
+      'Cliente: {{2}}\n' +
+      'Endereço: {{3}}\n' +
+      'Mapa: {{4}}',
+  },
+  {
+    type: 'CASHBACK_CREDIT',
+    label: 'Cashback creditado',
+    vars: [
+      { n: 1, hint: 'nome do cliente' },
+      { n: 2, hint: 'valor ganho (R$)' },
+      { n: 3, hint: 'saldo total (R$)' },
+    ],
+    example:
+      '{{1}}, você ganhou cashback! 💰\n\n' +
+      'Valor ganho: {{2}}\n' +
+      'Saldo total: {{3}}\n\n' +
+      'Use no seu próximo pedido!',
+  },
+]
+
+const legendOpen = ref(false)
+
+function applyExample(item) {
+  form.value.category = 'UTILITY'
+  form.value.body = item.example
+  // Sugere um nome se ainda estiver vazio — `dwl_<tipo>` evita colisão com
+  // templates existentes do operador.
+  if (!form.value.name) {
+    form.value.name = `dwl_${item.type.toLowerCase()}`
+  }
+}
+
 // Detect {{N}} variables in body — Meta requires them sequential starting at 1
 const bodyVariables = computed(() => {
   const matches = (form.value.body || '').match(/\{\{(\d+)\}\}/g) || []
@@ -240,6 +366,46 @@ async function submit() {
                 <select v-model="form.language" class="form-select">
                   <option v-for="l in LANGUAGES" :key="l.value" :value="l.value">{{ l.label }}</option>
                 </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mb-3 border-info-subtle">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between"
+                 role="button"
+                 @click="legendOpen = !legendOpen">
+              <h6 class="card-title mb-0">
+                <i class="bi bi-tags me-1 text-info"></i>
+                Legenda de variáveis das notificações do sistema
+              </h6>
+              <i class="bi" :class="legendOpen ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
+            </div>
+            <small class="form-text d-block mt-1">
+              Templates UTILITY usados para notificar pedidos. A <strong>ordem das variáveis precisa
+              bater exatamente</strong> com o tipo — senão o cliente recebe valores trocados.
+            </small>
+            <div v-if="legendOpen" class="mt-3">
+              <div v-for="item in NOTIFICATION_LEGEND" :key="item.type"
+                   class="border rounded p-2 mb-2">
+                <div class="d-flex align-items-center justify-content-between mb-1">
+                  <div>
+                    <strong>{{ item.label }}</strong>
+                    <code class="text-muted ms-2" style="font-size:0.75rem">{{ item.type }}</code>
+                  </div>
+                  <button type="button" class="btn btn-sm btn-outline-primary"
+                          @click="applyExample(item)">
+                    Usar exemplo
+                  </button>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                  <span v-for="v in item.vars" :key="v.n"
+                        class="badge bg-light text-dark border" style="font-weight:500">
+                    <code v-text="'{{' + v.n + '}}'" style="font-size:0.78rem"></code>
+                    <span class="ms-1 text-muted">{{ v.hint }}</span>
+                  </span>
+                </div>
               </div>
             </div>
           </div>
