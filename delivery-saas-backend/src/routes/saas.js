@@ -137,6 +137,61 @@ saasRouter.delete('/plans/:id', requireRole('SUPER_ADMIN'), async (req, res) => 
   res.json({ ok: true })
 })
 
+// List plans available for upgrade (ADMIN) — reflects the catalog configured in SaaS Admin
+saasRouter.get('/plans/available', requireRole('ADMIN'), async (req, res) => {
+  try {
+    const companyId = req.user.companyId
+    const [plans, subscription, activeModuleSubs] = await Promise.all([
+      prisma.saasPlan.findMany({
+        where: { isActive: true, isTrial: false },
+        include: { modules: { include: { module: true } }, prices: true },
+        orderBy: { price: 'asc' }
+      }),
+      prisma.saasSubscription.findUnique({ where: { companyId } }),
+      prisma.saasModuleSubscription.findMany({
+        where: { companyId, status: 'ACTIVE' },
+        include: { module: { include: { prices: true } } }
+      })
+    ])
+    res.json({
+      currentPlanId: subscription?.planId || null,
+      plans: plans.map(p => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        isDefault: p.isDefault,
+        menuLimit: p.menuLimit,
+        storeLimit: p.storeLimit,
+        whatsappLimit: p.whatsappLimit,
+        unlimitedMenus: p.unlimitedMenus,
+        unlimitedStores: p.unlimitedStores,
+        unlimitedWhatsapps: p.unlimitedWhatsapps,
+        aiCreditsMonthlyLimit: p.aiCreditsMonthlyLimit,
+        unlimitedAiCredits: p.unlimitedAiCredits,
+        prices: p.prices.map(pr => ({ period: pr.period, price: pr.price })),
+        modules: p.modules.filter(pm => pm.module && pm.module.isActive !== false).map(pm => ({
+          id: pm.module.id,
+          key: pm.module.key,
+          name: pm.module.name
+        }))
+      })),
+      // add-ons the company pays separately today (used for upsell math on upgrade)
+      activeModuleSubscriptions: activeModuleSubs.map(ms => ({
+        moduleId: ms.moduleId,
+        key: ms.module?.key || null,
+        name: ms.module?.name || null,
+        period: ms.period,
+        price: (() => {
+          const mp = (ms.module?.prices || []).find(p => String(p.period || '').toUpperCase() === String(ms.period || 'MONTHLY').toUpperCase())
+          return mp ? mp.price : null
+        })()
+      }))
+    })
+  } catch (e) {
+    res.status(500).json({ message: 'Erro ao listar planos disponíveis', error: e?.message || String(e) })
+  }
+})
+
 // -------- Company Subscriptions --------
 // Create or update a subscription for a company (SUPER_ADMIN)
 saasRouter.post('/subscriptions', requireRole('SUPER_ADMIN'), async (req, res) => {
@@ -683,12 +738,22 @@ saasRouter.get('/billing/dashboard', async (req, res) => {
     // Active subscriptions
     const subscription = await prisma.saasSubscription.findUnique({
       where: { companyId },
-      include: { plan: { select: { name: true, price: true } } },
+      include: { plan: { include: { modules: { include: { module: true } } } } },
     })
     const moduleSubs = await prisma.saasModuleSubscription.findMany({
       where: { companyId, status: 'ACTIVE' },
-      include: { module: { select: { name: true } } },
+      include: { module: { include: { prices: true } } },
     })
+
+    // Usage vs. plan limits (for the "Seu plano" usage bars)
+    const [menuCount, storeCount, whatsappCount, company] = await Promise.all([
+      prisma.menu.count({ where: { store: { companyId } } }),
+      prisma.store.count({ where: { companyId } }),
+      prisma.whatsAppInstance.count({ where: { companyId } }).catch(() => 0),
+      prisma.company.findUnique({ where: { id: companyId }, select: { aiCreditsBalance: true } }),
+    ])
+
+    const plan = subscription?.plan || null
 
     res.json({
       pendingCount,
@@ -696,19 +761,34 @@ saasRouter.get('/billing/dashboard', async (req, res) => {
       nextDueAmount: nextInvoice?.amount || null,
       totalSpentThisMonth: paidThisMonth._sum.amount || 0,
       monthlySpending,
-      plan: subscription ? {
-        name: subscription.plan.name,
-        price: subscription.plan.price,
+      plan: plan ? {
+        id: plan.id,
+        name: plan.name,
+        price: plan.price,
         status: subscription.status,
+        period: subscription.period,
         nextDueAt: subscription.nextDueAt,
+        modules: (plan.modules || []).filter(pm => pm.module && pm.module.isActive !== false).map(pm => ({ key: pm.module.key, name: pm.module.name })),
+        usage: {
+          menus: { used: menuCount, limit: plan.unlimitedMenus ? null : plan.menuLimit, unlimited: Boolean(plan.unlimitedMenus || plan.menuLimit == null) },
+          stores: { used: storeCount, limit: plan.unlimitedStores ? null : plan.storeLimit, unlimited: Boolean(plan.unlimitedStores || plan.storeLimit == null) },
+          whatsapps: { used: whatsappCount, limit: plan.unlimitedWhatsapps ? null : plan.whatsappLimit, unlimited: Boolean(plan.unlimitedWhatsapps || plan.whatsappLimit == null) },
+          aiCredits: { balance: company?.aiCreditsBalance ?? 0, monthlyLimit: plan.aiCreditsMonthlyLimit, unlimited: Boolean(plan.unlimitedAiCredits) },
+        },
       } : null,
-      moduleSubscriptions: moduleSubs.map(ms => ({
-        id: ms.id,
-        moduleName: ms.module.name,
-        status: ms.status,
-        period: ms.period,
-        nextDueAt: ms.nextDueAt,
-      })),
+      moduleSubscriptions: moduleSubs.map(ms => {
+        const mp = (ms.module?.prices || []).find(p => String(p.period || '').toUpperCase() === String(ms.period || 'MONTHLY').toUpperCase())
+        return {
+          id: ms.id,
+          moduleId: ms.moduleId,
+          moduleKey: ms.module?.key || null,
+          moduleName: ms.module?.name || '',
+          status: ms.status,
+          period: ms.period,
+          nextDueAt: ms.nextDueAt,
+          amount: mp ? mp.price : null,
+        }
+      }),
     })
   } catch (e) {
     console.error('GET /saas/billing/dashboard error:', e?.message)
