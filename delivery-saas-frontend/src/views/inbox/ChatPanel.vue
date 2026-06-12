@@ -66,6 +66,74 @@
 
     <!-- Lightbox -->
     <ImageLightbox v-if="lightboxSrc" :src="lightboxSrc" @close="lightboxSrc = null" />
+
+    <!-- Template picker modal — reabre janela 24h da Meta -->
+    <div v-if="templateModal.open" class="tpl-modal-backdrop" @click.self="closeTemplateModal">
+      <div class="tpl-modal-card">
+        <div class="tpl-modal-head">
+          <h6 class="mb-0">
+            <i class="bi bi-file-earmark-text me-1 text-info"></i>
+            Enviar template aprovado
+          </h6>
+          <button class="btn-close" @click="closeTemplateModal"></button>
+        </div>
+        <div class="tpl-modal-body">
+          <div v-if="templateModal.loading" class="text-center py-4">
+            <div class="spinner-border text-primary"></div>
+          </div>
+          <div v-else-if="templateModal.error" class="alert alert-danger">
+            {{ templateModal.error }}
+          </div>
+          <div v-else-if="!templateModal.list.length" class="alert alert-warning">
+            Nenhum template aprovado encontrado.
+            <router-link to="/settings/whatsapp-templates/new">Criar um agora →</router-link>
+          </div>
+          <template v-else>
+            <div class="mb-3">
+              <label class="form-label small fw-semibold">Template</label>
+              <select v-model="templateModal.selectedId" class="form-select" @change="onTemplateChange">
+                <option value="">Selecione um template...</option>
+                <option v-for="t in templateModal.list" :key="t.id" :value="t.id">
+                  {{ t.name }} <span v-if="t.language"> · {{ t.language }}</span>
+                </option>
+              </select>
+            </div>
+            <div v-if="selectedTemplate" class="mb-3">
+              <div class="border rounded p-2 mb-2" style="background:#f6f8fa">
+                <div class="small text-muted mb-1">Pré-visualização:</div>
+                <div style="white-space:pre-wrap;font-size:0.92rem">{{ previewText }}</div>
+              </div>
+              <div v-if="templateModal.varCount > 0">
+                <label class="form-label small fw-semibold">Variáveis</label>
+                <div v-for="n in templateModal.varCount" :key="n" class="mb-2">
+                  <div class="input-group input-group-sm">
+                    <span class="input-group-text"><code v-text="'{{' + n + '}}'"></code></span>
+                    <input
+                      v-model="templateModal.values[n]"
+                      class="form-control"
+                      :placeholder="`Valor para a variável ${n}`"
+                      @input="recalcPreview"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div v-else class="small text-muted fst-italic">Este template não tem variáveis.</div>
+            </div>
+          </template>
+        </div>
+        <div class="tpl-modal-foot">
+          <button class="btn btn-outline-secondary" @click="closeTemplateModal" :disabled="templateModal.sending">
+            Cancelar
+          </button>
+          <button class="btn btn-primary" @click="submitTemplate"
+                  :disabled="!canSubmitTemplate || templateModal.sending">
+            <span v-if="templateModal.sending" class="spinner-border spinner-border-sm me-1"></span>
+            <i v-else class="bi bi-send me-1"></i>
+            Enviar
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -73,6 +141,7 @@
 import { ref, computed, watch, nextTick, onMounted } from 'vue';
 import Swal from 'sweetalert2';
 import { useInboxStore } from '@/stores/inbox';
+import api from '@/api';
 import ConversationHeader from './ConversationHeader.vue';
 import ChatBubble from './ChatBubble.vue';
 import ChatInput from './ChatInput.vue';
@@ -148,12 +217,106 @@ const metaWindow = computed(() => {
   return { show: false, message: '' };
 });
 
-function onSendTemplate() {
-  Swal.fire({
-    icon: 'info',
-    title: 'Em breve',
-    text: 'O envio de templates aprovados pela Meta estará disponível em breve.',
+// ─── Template picker (reabre janela 24h da Meta) ───────────────────────────
+const templateModal = ref({
+  open: false,
+  loading: false,
+  sending: false,
+  error: '',
+  list: [],
+  selectedId: '',
+  varCount: 0,
+  values: {}, // { 1: 'Maria', 2: '#77' }
+});
+const previewText = ref('');
+
+const selectedTemplate = computed(() => {
+  return templateModal.value.list.find(t => t.id === templateModal.value.selectedId) || null;
+});
+
+function templateBodyText(t) {
+  if (!t || !Array.isArray(t.components)) return '';
+  const body = t.components.find(c => (c.type || '').toUpperCase() === 'BODY');
+  return body?.text || '';
+}
+
+function countVars(text) {
+  const matches = (text || '').match(/\{\{(\d+)\}\}/g) || [];
+  return new Set(matches.map(m => Number(m.replace(/[{}]/g, '')))).size;
+}
+
+function recalcPreview() {
+  const body = templateBodyText(selectedTemplate.value);
+  previewText.value = body.replace(/\{\{(\d+)\}\}/g, (_, n) => {
+    const v = templateModal.value.values[n];
+    return v ? String(v) : `{{${n}}}`;
   });
+}
+
+function onTemplateChange() {
+  const body = templateBodyText(selectedTemplate.value);
+  templateModal.value.varCount = countVars(body);
+  templateModal.value.values = {};
+  recalcPreview();
+}
+
+const canSubmitTemplate = computed(() => {
+  const m = templateModal.value;
+  if (!m.selectedId) return false;
+  for (let i = 1; i <= m.varCount; i++) {
+    if (!m.values[i] || !String(m.values[i]).trim()) return false;
+  }
+  return true;
+});
+
+async function onSendTemplate() {
+  templateModal.value.open = true;
+  templateModal.value.loading = true;
+  templateModal.value.error = '';
+  templateModal.value.selectedId = '';
+  templateModal.value.varCount = 0;
+  templateModal.value.values = {};
+  previewText.value = '';
+  try {
+    const { data } = await api.get('/meta/templates', { params: { status: 'APPROVED' } });
+    templateModal.value.list = Array.isArray(data) ? data : [];
+  } catch (e) {
+    templateModal.value.error = e?.response?.data?.message || 'Falha ao carregar templates';
+  } finally {
+    templateModal.value.loading = false;
+  }
+}
+
+function closeTemplateModal() {
+  if (templateModal.value.sending) return;
+  templateModal.value.open = false;
+}
+
+async function submitTemplate() {
+  if (!canSubmitTemplate.value) return;
+  templateModal.value.sending = true;
+  try {
+    await api.post(`/inbox/conversations/${props.conversationId}/send-template`, {
+      templateId: templateModal.value.selectedId,
+      variables: { ...templateModal.value.values },
+    });
+    templateModal.value.open = false;
+    Swal.fire({
+      icon: 'success',
+      title: 'Template enviado',
+      text: 'Quando o cliente responder, a janela de 24h reabre e você poderá enviar mensagens livres.',
+      timer: 3500,
+      showConfirmButton: false,
+    });
+  } catch (e) {
+    Swal.fire({
+      icon: 'error',
+      title: 'Falha ao enviar',
+      text: e?.response?.data?.message || 'Erro inesperado',
+    });
+  } finally {
+    templateModal.value.sending = false;
+  }
 }
 
 function onReply(messageId) {
@@ -305,5 +468,45 @@ onMounted(() => {
   z-index: 100;
   pointer-events: none;
   color: #6dae1e;
+}
+
+.tpl-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1080;
+  padding: 1rem;
+}
+.tpl-modal-card {
+  background: #fff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 540px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.25);
+}
+.tpl-modal-head {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #eef0f3;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.tpl-modal-body {
+  padding: 1.25rem;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+.tpl-modal-foot {
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid #eef0f3;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
 }
 </style>

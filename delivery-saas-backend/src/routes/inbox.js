@@ -566,6 +566,150 @@ router.post('/conversations/:id/send', upload.single('media'), async (req, res) 
   }
 });
 
+// ─── 4a. POST /conversations/:id/send-template — Send approved template ────
+//
+// Reabre a janela de 24h com um template APPROVED da Meta. Usado quando
+// `metaWindow.show=true` no frontend (cliente nunca conversou ou janela 24h
+// expirada). Templates não-Meta retornam 400. body:
+//   { templateId: <uuid>, variables: { "1": "Maria", "2": "#77", ... } }
+
+router.post('/conversations/:id/send-template', async (req, res) => {
+  try {
+    const { companyId } = req.user;
+    const { templateId, variables } = req.body || {};
+    if (!templateId) {
+      return res.status(400).json({ message: 'templateId é obrigatório' });
+    }
+    const vars = variables && typeof variables === 'object' ? variables : {};
+
+    const conversation = await prisma.conversation.findFirst({
+      where: { id: req.params.id, companyId },
+    });
+    if (!conversation) {
+      return res.status(404).json({ message: 'Conversa não encontrada' });
+    }
+    if (conversation.provider !== 'META_WA') {
+      return res.status(400).json({
+        message: 'Templates só funcionam em conversas Meta WhatsApp Cloud',
+      });
+    }
+
+    const { account: metaAccount, ambiguous } = await resolveMetaWaAccountForConversation(conversation, companyId);
+    if (!metaAccount) {
+      return res.status(400).json({
+        message: ambiguous
+          ? 'Múltiplas contas Meta WhatsApp ativas — vincule esta conversa a um cardápio.'
+          : 'Nenhuma conta Meta WhatsApp ativa para esta empresa.',
+      });
+    }
+
+    // Template precisa pertencer à empresa, estar APPROVED e (idealmente) à
+    // mesma WhatsApp account da conversa — templates ficam atrelados ao WABA.
+    const template = await prisma.metaTemplate.findFirst({
+      where: { id: templateId, companyId },
+    });
+    if (!template) {
+      return res.status(404).json({ message: 'Template não encontrado' });
+    }
+    if (template.status !== 'APPROVED') {
+      return res.status(400).json({
+        message: `Template está ${template.status} — apenas APPROVED podem ser enviados`,
+      });
+    }
+
+    // Conta o número de variáveis {{N}} no BODY do template e valida que o
+    // operador forneceu todas. Sem isso a Meta rejeita com 132000 (parâmetros
+    // ausentes) e o erro chega genérico no painel.
+    const components = Array.isArray(template.components) ? template.components : [];
+    const bodyComponent = components.find(c => (c.type || '').toUpperCase() === 'BODY');
+    const bodyText = bodyComponent?.text || '';
+    const varMatches = bodyText.match(/\{\{(\d+)\}\}/g) || [];
+    const expectedVarCount = new Set(varMatches.map(m => Number(m.replace(/[{}]/g, '')))).size;
+
+    const parameters = [];
+    for (let i = 1; i <= expectedVarCount; i++) {
+      const val = vars[String(i)];
+      if (val === undefined || val === null || String(val).trim() === '') {
+        return res.status(400).json({
+          message: `Variável {{${i}}} é obrigatória pra este template`,
+        });
+      }
+      parameters.push({ type: 'text', text: String(val) });
+    }
+
+    const sendComponents = expectedVarCount > 0
+      ? [{ type: 'body', parameters }]
+      : [];
+
+    // Render o texto final pra persistir no inbox (operadores precisam ver
+    // o conteúdo enviado, não os {{1}}/{{2}} originais).
+    const renderedText = bodyText.replace(/\{\{(\d+)\}\}/g, (_, n) => vars[String(n)] ?? '');
+
+    const to = conversation.channelContactId;
+    let sendResult;
+    try {
+      sendResult = await whatsappMetaAdapter.sendTemplate(metaAccount, to, {
+        name: template.name,
+        languageCode: template.language || 'pt_BR',
+        components: sendComponents,
+      });
+    } catch (err) {
+      const metaCode = err?.metaCode || null;
+      const metaErr = err?.metaError || null;
+      console.error('[inbox] template send failed', {
+        conversationId: conversation.id,
+        templateId,
+        templateName: template.name,
+        metaCode,
+        metaError: metaErr,
+        message: err?.message,
+      });
+      let friendly = 'Falha ao enviar template';
+      if (metaCode === 190) friendly = 'Token Meta expirado — reconecte a conta em Integrações';
+      else if (metaErr?.message) friendly = `Meta: ${metaErr.message}`;
+      return res.status(500).json({ message: friendly, metaCode, error: err.message });
+    }
+
+    const message = await prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        direction: 'OUTBOUND',
+        type: 'TEXT',
+        body: renderedText,
+        externalId: sendResult.externalId || null,
+        status: sendResult.status || 'SENT',
+      },
+    });
+
+    const updatedConversation = await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { lastMessageAt: new Date() },
+      include: {
+        customer: { select: { id: true, fullName: true, whatsapp: true } },
+        assignedUser: { select: { id: true, name: true } },
+        store: { select: { id: true, name: true } },
+      },
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      const payload = {
+        conversationId: conversation.id,
+        conversation: updatedConversation,
+        message,
+        companyId,
+      };
+      io.to(`company_${companyId}`).emit('inbox:new-message', payload);
+      io.emit('inbox:new-message:broadcast', payload);
+    }
+
+    return res.status(201).json(message);
+  } catch (err) {
+    console.error('[inbox] POST /conversations/:id/send-template error:', err);
+    return res.status(500).json({ message: 'Erro ao enviar template', error: err.message });
+  }
+});
+
 // ─── 4b. POST /conversations/:id/internal-note — Internal note ─────────────
 
 router.post('/conversations/:id/internal-note', async (req, res) => {
