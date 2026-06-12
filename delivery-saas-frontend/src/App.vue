@@ -22,7 +22,6 @@ import OnboardingWizard from './components/OnboardingWizard.vue';
 import PurchaseImportModal from './components/PurchaseImportModal.vue';
 import LuccaChat from './components/LuccaChat.vue';
 import { useBarcodeScanner } from './composables/useBarcodeScanner.js';
-import * as bootstrap from 'bootstrap';
 
 const mobileOpen = ref(false);
 const auth = useAuthStore();
@@ -48,10 +47,13 @@ function onScannerModalClose() {
 // Fecha o offcanvas mobile ao navegar por um link.
 // Não usar data-bs-dismiss em <a>: o handler delegado do Bootstrap roda em
 // capture phase e chama preventDefault antes do router-link, abortando a navegação.
+// E não fechar via bootstrap.Offcanvas de um módulo específico: o app carrega o
+// Bootstrap duas vezes (bundle no main.js + ESM nos componentes), cada um com sua
+// instância/backdrop — fechar por um só deixa o backdrop do outro órfão na tela.
+// Clicar no botão X dispara o data-API dos dois módulos, igual ao fechamento manual.
 function closeMobileNav() {
   try {
-    const el = document.getElementById('appSidebar')
-    if (el) bootstrap.Offcanvas.getOrCreateInstance(el).hide()
+    document.querySelector('#appSidebar [data-bs-dismiss="offcanvas"]')?.click()
   } catch (e) { /* ignore */ }
 }
 const saas = useSaasStore();
