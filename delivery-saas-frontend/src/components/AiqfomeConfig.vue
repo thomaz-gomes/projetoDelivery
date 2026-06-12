@@ -41,6 +41,13 @@ function storeName(integ) {
   return s ? s.name : integ.storeId;
 }
 
+// Nome(s) do(s) cardápio(s) vinculado(s) à integração (desambigua múltiplas).
+function menuNamesFor(integ) {
+  const links = integ?.menuLinks || [];
+  if (!links.length) return 'Cardápio: nenhum vinculado';
+  return 'Cardápio: ' + links.map(l => l.menu?.name || l.menuId).join(', ');
+}
+
 const webhookUrl = computed(() => {
   // Prefere a base real do backend (axios baseURL); cai para o origin (app.->api.)
   // só quando API_URL é relativo/vazio (modo proxy em dev).
@@ -324,6 +331,7 @@ onMounted(async () => {
                   <div class="d-flex align-items-center gap-3">
                     <div>
                       <div class="fw-semibold">{{ storeName(integ) }}</div>
+                      <div class="text-muted small"><i class="bi bi-card-list me-1"></i>{{ menuNamesFor(integ) }}</div>
                       <div class="text-muted small">Merchant ID: {{ integ.merchantId || '—' }}</div>
                     </div>
                     <span v-if="isActive(integ)" class="badge bg-success">Conectado</span>
