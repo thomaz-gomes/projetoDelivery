@@ -496,11 +496,36 @@ async function trySendViaTemplate({ companyId, notificationType, account, to, co
   }
 }
 
+// True quando o cliente abriu (ou reabriu) a janela 24h da Meta enviando
+// mensagem inbound nas últimas 24h. Usado pra decidir entre TEXT livre
+// (preserva detalhes) e template (único caminho fora da janela).
+async function isWithinMeta24hWindow({ companyId, customerId, menuId, providerAccountId }) {
+  if (!companyId || !customerId) return false;
+  const conv = await prisma.conversation.findFirst({
+    where: {
+      companyId,
+      customerId,
+      channel: 'WHATSAPP',
+      provider: 'META_WA',
+      ...(menuId ? { menuId } : {}),
+      ...(providerAccountId ? { providerAccountId } : {}),
+    },
+    orderBy: { lastInboundAt: 'desc' },
+    select: { lastInboundAt: true },
+  });
+  if (!conv?.lastInboundAt) return false;
+  const ageMs = Date.now() - new Date(conv.lastInboundAt).getTime();
+  return ageMs < 24 * 60 * 60 * 1000;
+}
+
 // Send a TEXT notification via the provider chosen by pickNotificationChannel.
-// Cascade quando Meta rejeitar por janela de 24h:
-//   1) tenta template aprovado mapeado para este tipo de notificação
-//   2) tenta Evolution como fallback se houver
-//   3) re-lança o erro original se nada funcionar
+//
+// Para Meta, decide o caminho ANTES de chamar a API:
+//   - Janela 24h aberta → tenta TEXT livre (preserva detalhes do pedido).
+//     Se cair em 131047/131051 mesmo assim, cascata: template → Evolution.
+//   - Janela 24h fechada (ou cliente nunca conversou) → vai direto pra
+//     template. Falha do template cascata pra Evolution.
+//
 // Returns { provider, providerAccountId, instanceName, externalId,
 // templateUsed?, fallbackUsed? } describing what actually went out.
 async function sendNotificationText({
@@ -510,8 +535,64 @@ async function sendNotificationText({
   text,
   fallbackEvolution = null,
   templateFallback = null,
+  customerId = null,
+  menuId = null,
 }) {
   if (provider === 'META_WA') {
+    const withinWindow = await isWithinMeta24hWindow({
+      companyId: account?.companyId,
+      customerId,
+      menuId,
+      providerAccountId: account?.id,
+    });
+
+    // Fora da janela: vai direto pra template. Free text seria garantido falhar.
+    if (!withinWindow && templateFallback?.notificationType) {
+      console.log('[notify] Meta fora da janela 24h — enviando template direto', {
+        to,
+        notificationType: templateFallback.notificationType,
+      });
+      const tplResult = await trySendViaTemplate({
+        companyId: account.companyId,
+        notificationType: templateFallback.notificationType,
+        account,
+        to,
+        context: templateFallback.context,
+      });
+      if (tplResult) {
+        return {
+          provider: 'META_WA',
+          providerAccountId: account.id,
+          instanceName: null,
+          externalId: tplResult.externalId,
+          templateUsed: true,
+        };
+      }
+      // Template indisponível (sem mapping, não APPROVED ou erro na API)
+      // → cai pra Evolution se houver.
+      if (fallbackEvolution) {
+        console.warn('[notify] template indisponível fora da janela — caindo para Evolution', { to });
+        await evoSendText({ instanceName: fallbackEvolution.instanceName, to, text });
+        return {
+          provider: 'EVOLUTION_WA',
+          providerAccountId: fallbackEvolution.id,
+          instanceName: fallbackEvolution.instanceName,
+          externalId: null,
+          fallbackUsed: true,
+        };
+      }
+      // Sem template e sem Evolution: não há como entregar. Loga e falha mudo.
+      console.warn('[notify] sem template mapeado e sem Evolution fallback — mensagem não enviada', {
+        to,
+        notificationType: templateFallback.notificationType,
+      });
+      throw new MetaWindowExpiredError('whatsapp-meta', {
+        channelContactId: to,
+        accountId: account?.id || null,
+      });
+    }
+
+    // Dentro da janela (ou sem templateFallback): tenta TEXT livre.
     try {
       const result = await whatsappMetaAdapter.sendMessage(account, to, { type: 'TEXT', text });
       return {
@@ -522,9 +603,10 @@ async function sendNotificationText({
       };
     } catch (err) {
       if (err instanceof MetaWindowExpiredError) {
-        // 1. Tenta template aprovado pra este tipo de notificação
+        // Race rara: nossa Conversation diz aberta mas Meta diz fechada.
+        // Tenta template como fallback de emergência.
         if (templateFallback?.notificationType) {
-          console.warn('[notify] Meta 24h window expired — tentando template', {
+          console.warn('[notify] Meta rejeitou TEXT mesmo com janela aberta — fallback template', {
             to,
             notificationType: templateFallback.notificationType,
           });
@@ -545,7 +627,6 @@ async function sendNotificationText({
             };
           }
         }
-        // 2. Cai pra Evolution se disponível
         if (fallbackEvolution) {
           console.warn('[notify] template indisponível — caindo para Evolution', { to });
           await evoSendText({ instanceName: fallbackEvolution.instanceName, to, text });
@@ -681,6 +762,8 @@ export async function notifyRiderAssigned(orderId, { overridePhone } = {}) {
         to: phone,
         text,
         fallbackEvolution: channel.fallbackEvolution,
+        customerId: order.customerId || null,
+        menuId: order.menuId || null,
         templateFallback: {
           notificationType: 'RIDER_ASSIGNED',
           context: {
@@ -833,6 +916,8 @@ Fique tranquilo(a) que vou enviar as atualizações do status do seu pedido por 
         to: phone,
         text,
         fallbackEvolution: channel.fallbackEvolution,
+        customerId: order.customerId || null,
+        menuId: order.menuId || null,
         templateFallback: {
           // newStatus pode ser EM_PREPARO / SAIU_PARA_ENTREGA / CONCLUIDO /
           // CANCELADO / CONFIRMACAO_PAGAMENTO — bate 1-pra-1 com NotificationType.
@@ -976,6 +1061,8 @@ export async function notifyCustomerOrderSummary(orderId) {
         to: phone,
         text,
         fallbackEvolution: channel.fallbackEvolution,
+        customerId: order.customerId || null,
+        menuId: order.menuId || null,
         templateFallback: {
           notificationType: 'ORDER_SUMMARY',
           context: {
@@ -1106,6 +1193,8 @@ Use seu cashback no próximo pedido. 😊`;
         to: phone,
         text,
         fallbackEvolution: channel.fallbackEvolution,
+        customerId: clientId || null,
+        menuId: lastOrderMenuId || null,
         templateFallback: {
           notificationType: 'CASHBACK_CREDIT',
           context: {
