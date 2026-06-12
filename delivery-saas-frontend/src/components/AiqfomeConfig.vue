@@ -181,30 +181,24 @@ async function configureWebhook(integ) {
   } finally { webhookConfiguring.value = ''; }
 }
 
-// Integração exibida (conectada) — usada para mirar inspect/test na correta.
-function targetIntegId() {
-  const i = integrations.value.find(x => isActive(x)) || integrations.value[0];
-  return i?.id || null;
-}
-
-const webhookTesting = ref(false);
-async function testWebhook() {
-  const id = targetIntegId();
+const webhookTesting = ref('');
+async function testWebhook(integ) {
+  const id = integ?.id;
   if (!id) { showStatus('Nenhuma integração aiqfome conectada.', 'danger'); return; }
-  webhookTesting.value = true;
+  webhookTesting.value = id;
   try {
     await api.post('/integrations/aiqfome/webhook/test', { integrationId: id });
-    showStatus('Evento de teste disparado. Veja se o pedido aparece e confira o log OUT no aiqbridge.', 'success');
+    showStatus(`Evento de teste disparado (merchant ${integ.merchantId || '—'}). Confira o visualizador e o log OUT no aiqbridge.`, 'success');
   } catch (e) {
     showStatus(errDetail(e, 'Falha ao disparar evento de teste.'), 'danger');
-  } finally { webhookTesting.value = false; }
+  } finally { webhookTesting.value = ''; }
 }
 
-const webhookInspecting = ref(false);
-async function inspectWebhook() {
-  const id = targetIntegId();
+const webhookInspecting = ref('');
+async function inspectWebhook(integ) {
+  const id = integ?.id;
   if (!id) { showStatus('Nenhuma integração aiqfome conectada.', 'danger'); return; }
-  webhookInspecting.value = true;
+  webhookInspecting.value = id;
   try {
     const { data } = await api.get('/integrations/aiqfome/webhook/config', { params: { integrationId: id } });
     await Swal.fire({
@@ -215,7 +209,7 @@ async function inspectWebhook() {
     });
   } catch (e) {
     showStatus(errDetail(e, 'Falha ao consultar a config do webhook.'), 'danger');
-  } finally { webhookInspecting.value = false; }
+  } finally { webhookInspecting.value = ''; }
 }
 
 const webhookEventsLoading = ref(false);
@@ -354,6 +348,14 @@ onMounted(async () => {
                       <span v-if="webhookConfiguring === integ.id" class="spinner-border spinner-border-sm me-1"></span>
                       <i v-else class="bi bi-broadcast"></i> Registrar webhook
                     </button>
+                    <button v-if="isActive(integ)" class="btn btn-sm btn-outline-secondary" @click="inspectWebhook(integ)" :disabled="webhookInspecting === integ.id" title="Ver config registrada no aiqbridge">
+                      <span v-if="webhookInspecting === integ.id" class="spinner-border spinner-border-sm"></span>
+                      <i v-else class="bi bi-search"></i>
+                    </button>
+                    <button v-if="isActive(integ)" class="btn btn-sm btn-outline-secondary" @click="testWebhook(integ)" :disabled="webhookTesting === integ.id" title="Disparar evento de teste nesta integração">
+                      <span v-if="webhookTesting === integ.id" class="spinner-border spinner-border-sm"></span>
+                      <i v-else class="bi bi-send"></i>
+                    </button>
                     <button v-if="isActive(integ)" class="btn btn-sm btn-outline-danger" @click="disconnect(integ)"><i class="bi bi-x-circle"></i> Desconectar</button>
                     <button class="btn btn-sm btn-outline-secondary" @click="deleteInteg(integ)" title="Remover"><i class="bi bi-trash"></i></button>
                   </div>
@@ -393,19 +395,11 @@ onMounted(async () => {
           <div class="card-body py-2 d-flex align-items-center flex-wrap gap-2">
             <i class="bi bi-globe text-primary"></i>
             <div class="flex-grow-1" style="min-width:0">
-              <div class="small text-muted">URL do Webhook — use <strong>Registrar webhook</strong> acima para configurar automaticamente, ou cole no dashboard aiqbridge</div>
+              <div class="small text-muted">URL do Webhook — use <strong>Registrar webhook</strong> (em cada integração) para configurar, ou cole no dashboard aiqbridge. <strong>Testar</strong> e <strong>Ver config</strong> ficam em cada integração.</div>
               <code class="small user-select-all" style="word-break:break-all">{{ webhookUrl }}</code>
             </div>
             <div class="ms-auto d-flex gap-1">
-              <button class="btn btn-sm btn-outline-secondary" @click="inspectWebhook" :disabled="webhookInspecting" title="Ver config registrada no aiqbridge">
-                <span v-if="webhookInspecting" class="spinner-border spinner-border-sm"></span>
-                <i v-else class="bi bi-search"></i>
-              </button>
-              <button class="btn btn-sm btn-outline-secondary" @click="testWebhook" :disabled="webhookTesting" title="Disparar evento de teste">
-                <span v-if="webhookTesting" class="spinner-border spinner-border-sm"></span>
-                <i v-else class="bi bi-send"></i>
-              </button>
-              <button class="btn btn-sm btn-outline-secondary" @click="viewWebhookEvents" :disabled="webhookEventsLoading" title="Ver webhooks recebidos">
+              <button class="btn btn-sm btn-outline-secondary" @click="viewWebhookEvents" :disabled="webhookEventsLoading" title="Ver todos os webhooks recebidos">
                 <span v-if="webhookEventsLoading" class="spinner-border spinner-border-sm"></span>
                 <i v-else class="bi bi-list-check"></i>
               </button>
