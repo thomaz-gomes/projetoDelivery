@@ -8,7 +8,7 @@ import { assetUrl } from '../utils/assetUrl.js'
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import * as bootstrap from 'bootstrap';
-import AiCreditsWidget from './AiCreditsWidget.vue';
+import { useAiCreditsStore } from '../stores/aiCredits.js';
 import { useAddOnStoreStore } from '../stores/addOnStore';
 import { useInboxStore } from '@/stores/inbox';
 
@@ -244,6 +244,33 @@ const menusDropdownEl = ref(null)
 const quickMenuOpen = ref(false)
 const quickMenuBtn = ref(null)
 const quickMenuMenu = ref(null)
+
+// AI credits shown inside the user dropdown
+const aiCredits = useAiCreditsStore()
+watch(quickMenuOpen, (open) => {
+  if (open && aiCredits.balance === null) aiCredits.fetch().catch(() => {})
+})
+
+// effective open state of a menu: manual override wins over schedule
+function isMenuOpen(m) {
+  return (m._meta && m._meta.forceOpen !== undefined && m._meta.forceOpen !== null)
+    ? !!m._meta.forceOpen
+    : !!(m._status && m._status.isOpen)
+}
+const openMenusCount = computed(() => (menusList.value || []).filter(isMenuOpen).length)
+
+function menuInitials(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[1][0]).toUpperCase()
+}
+const MENU_LOGO_COLORS = ['#3a7d2c', '#2b2b2b', '#d9942b', '#cf3b34', '#b5392f', '#0d6f99', '#6b4fa0']
+function menuColor(name) {
+  let h = 0
+  for (const ch of String(name || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  return MENU_LOGO_COLORS[h % MENU_LOGO_COLORS.length]
+}
 
 // detect small screens (mobile) to change dropdown behavior/style
 const isMobile = ref(typeof window !== 'undefined' ? (window.innerWidth <= 576) : false)
@@ -772,39 +799,59 @@ function selectMenuOption(opt){
           <i class="bi bi-chevron-down"></i>
         </div>
           </button>
-          <ul ref="quickMenuMenu" :class="['dropdown-menu','dropdown-menu-end',{ show: quickMenuOpen }]" aria-labelledby="quickMenuDropdown" v-show="quickMenuOpen">
-            
-            <li v-if="!saas.isCardapioSimplesOnly && (menusList || []).length === 0" class="dropdown-item text-muted">Nenhum cardápio disponível</li>
-            <li v-if="!saas.isCardapioSimplesOnly" v-for="m in menusList" :key="m.id" class="dropdown-item d-flex align-items-center justify-content-between py-2">
-              <div class="d-flex align-items-center">
-                <img v-if="m._thumb" :src="m._thumb" alt="" style="width:28px;height:28px;object-fit:cover;border-radius:6px;margin-right:8px" />
-                <div style="min-width:120px">
-                  <div style="font-weight:600">{{ m.name }}</div>
-                  <small class="text-muted">{{ (m._status && m._status.isOpen) ? 'Aberto' : 'Fechado' }}</small>
+          <div v-if="quickMenuOpen" ref="quickMenuMenu" class="user-menu" aria-labelledby="quickMenuDropdown">
+            <template v-if="!saas.isCardapioSimplesOnly">
+              <div class="um-head">
+                <span class="um-label">Minhas lojas</span>
+                <span class="um-count">{{ openMenusCount }} aberta{{ openMenusCount === 1 ? '' : 's' }}</span>
+              </div>
+              <div class="um-stores">
+                <div v-if="(menusList || []).length === 0" class="um-empty">Nenhum cardápio disponível</div>
+                <div v-for="m in menusList" :key="m.id" class="store-row" :class="{ 'is-open': isMenuOpen(m) }">
+                  <img v-if="m._thumb" :src="m._thumb" alt="" class="store-logo store-logo-img" />
+                  <span v-else class="store-logo" :style="{ background: menuColor(m.name) }">{{ menuInitials(m.name) }}</span>
+                  <div class="store-meta">
+                    <div class="store-name">{{ m.name }}</div>
+                    <div class="store-status"><span class="st-dot"></span>{{ isMenuOpen(m) ? 'Aberto' : 'Fechado' }}</div>
+                  </div>
+                  <button
+                    class="switch"
+                    :class="{ on: isMenuOpen(m) }"
+                    type="button"
+                    role="switch"
+                    :aria-checked="isMenuOpen(m)"
+                    :aria-label="`Alternar ${m.name}`"
+                    @click="onToggleForce(m, { target: { checked: !isMenuOpen(m) } })"
+                  >
+                    <span class="knob"></span>
+                  </button>
                 </div>
               </div>
-              <div>
-                <div class="form-check form-switch m-0">
-                  <input class="form-check-input" type="checkbox" :checked="(m._meta && (m._meta.forceOpen !== undefined)) ? m._meta.forceOpen : (m._status && m._status.isOpen)" @change.prevent="onToggleForce(m, $event)" />
-                </div>
+            </template>
+
+            <div v-if="auth.user?.companyId" class="um-credits">
+              <div class="cr-top">
+                <span class="cr-title"><i class="bi bi-stars"></i> Créditos IA</span>
+                <span class="cr-count">{{ aiCredits.balance ?? '—' }} <span class="cr-max">/ {{ aiCredits.monthlyLimit }}</span></span>
               </div>
-            </li>
-            <li><hr class="dropdown-divider"></li>
-            <li class="px-1 py-1">
-              <AiCreditsWidget compact v-if="auth.user?.companyId" />
-            </li>
-            <li><hr class="dropdown-divider"></li>
-            <li>
-              <router-link to="/billing" class="dropdown-item d-flex align-items-center" @click="quickMenuOpen = false">
-                <i class="bi bi-receipt-cutoff me-2"></i> Cobranças
-                <span v-if="addOnStore.pendingInvoiceCount" class="badge bg-danger ms-auto">{{ addOnStore.pendingInvoiceCount }}</span>
+              <div class="cr-bar"><span :style="{ width: aiCredits.percent() + '%' }"></span></div>
+              <div class="cr-foot">
+                <span v-if="aiCredits.nextResetFormatted()" class="cr-renew"><i class="bi bi-clock"></i> Renova em {{ aiCredits.nextResetFormatted() }}</span>
+                <span v-else></span>
+                <button class="cr-buy" type="button" @click="quickMenuOpen = false; router.push('/store/credits')">Comprar créditos</button>
+              </div>
+            </div>
+
+            <div class="um-links">
+              <router-link to="/billing" class="um-link" @click="quickMenuOpen = false">
+                <i class="bi bi-receipt"></i> <span>Cobranças</span>
+                <span v-if="addOnStore.pendingInvoiceCount" class="um-badge">{{ addOnStore.pendingInvoiceCount }}</span>
               </router-link>
-            </li>
-            <li><hr class="dropdown-divider"></li>
-            <li>
-              <button class="dropdown-item" @click.prevent="logout()">Sair</button>
-            </li>
-          </ul>
+              <a href="#" class="um-link um-logout" @click.prevent="logout()">
+                <i class="bi bi-box-arrow-right"></i> <span>Sair</span>
+              </a>
+            </div>
+          </div>
         </div>
       </div>
     </header>
@@ -1229,27 +1276,80 @@ button#quickMenuDropdown[aria-expanded="true"], .btn:first-child:active {
   border-radius: 16px 16px 0px 0px;
 }
 
-/* animated open/close for quick menu dropdown */
-.dropdown .dropdown-menu {
-  transform-origin: top right;
-  transform: translateY(-6px) scale(0.98);
-  opacity: 0;
-  transition: transform 180ms cubic-bezier(.2,.9,.2,1), opacity 320ms ease;
-  will-change: transform, opacity;
-}
-.dropdown .dropdown-menu.show {
-  transform: translateY(0) scale(1);
-  opacity: 1;
-  right: 0px;
-  position: absolute;
-  background: #89d136;
-  border-color: #89d136;
-  border-radius: 16px 0px 16px 16px;
-  box-shadow: none;
-}
 #quickMenuDropdown::after { display:none; }
-.form-switch .form-check-input:checked {
-    background-color: #000000;
-    border-color: var(--success);
+
+/* ---------- User menu (green dropdown — Cobranças template) ---------- */
+.user-menu {
+  position: absolute; top: calc(100% + 10px); right: 0; width: 332px; z-index: 1400;
+  background: linear-gradient(180deg, #84c63f 0%, #74b531 100%);
+  border-radius: 18px; padding: 8px; color: #fff;
+  box-shadow: 0 22px 50px rgba(58,110,18,.38), 0 4px 12px rgba(0,0,0,.12);
+  animation: um-pop .18s cubic-bezier(.2,.7,.3,1);
+  text-align: left;
 }
+@keyframes um-pop { from { opacity: 0; transform: translateY(12px) scale(.985); } }
+.user-menu::after {
+  content: ''; position: absolute; top: -7px; right: 26px; width: 14px; height: 14px;
+  background: #84c63f; transform: rotate(45deg); border-radius: 3px;
+}
+.um-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px 6px; }
+.um-label { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.78); white-space: nowrap; }
+.um-count { font-size: 11px; font-weight: 700; color: #fff; background: rgba(255,255,255,.22); padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+
+.um-stores { display: flex; flex-direction: column; gap: 2px; }
+.um-empty { padding: 10px 12px; font-size: 13px; font-weight: 600; color: rgba(255,255,255,.85); }
+.store-row { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 12px; transition: background .14s; }
+.store-row:hover { background: rgba(255,255,255,.16); }
+.store-logo {
+  width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; flex-shrink: 0;
+  color: #fff; font-weight: 800; font-size: 12.5px; letter-spacing: -.02em;
+  box-shadow: 0 2px 5px rgba(0,0,0,.18), inset 0 0 0 1px rgba(255,255,255,.18);
+}
+.store-logo-img { object-fit: cover; }
+.store-meta { flex: 1; min-width: 0; }
+.store-row .store-name { font-weight: 700; font-size: 14.5px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.store-status { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: rgba(255,255,255,.82); margin-top: 1px; }
+.st-dot { width: 7px; height: 7px; border-radius: 50%; background: #ffd9d2; box-shadow: 0 0 0 2px rgba(255,255,255,.12); }
+.store-row.is-open .st-dot { background: #eafad3; box-shadow: 0 0 6px rgba(234,250,211,.9); }
+
+/* switch */
+.switch {
+  width: 46px; height: 26px; border-radius: 999px; border: 0; cursor: pointer; flex-shrink: 0;
+  background: rgba(20,50,8,.30); position: relative; transition: background .2s; padding: 0;
+}
+.switch .knob {
+  position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: left .2s cubic-bezier(.3,1.4,.5,1);
+}
+.switch.on { background: #ffffff; }
+.switch.on .knob { left: 23px; background: #5ea829; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+
+.um-credits {
+  margin: 8px 4px; padding: 13px 14px; border-radius: 14px;
+  background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.22);
+}
+.cr-top { display: flex; align-items: center; justify-content: space-between; }
+.cr-title { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 800; color: #fff; white-space: nowrap; }
+.cr-count { font-size: 14px; font-weight: 800; color: #fff; white-space: nowrap; }
+.cr-max { color: rgba(255,255,255,.65); font-weight: 700; }
+.cr-bar { height: 7px; border-radius: 999px; background: rgba(20,50,8,.22); overflow: hidden; margin: 10px 0 11px; }
+.cr-bar > span { display: block; height: 100%; border-radius: 999px; background: #fff; }
+.cr-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.cr-renew { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: rgba(255,255,255,.85); }
+.cr-buy {
+  border: 0; background: #fff; color: #4a8a1f; font-family: inherit; font-weight: 800; font-size: 12.5px;
+  padding: 7px 13px; border-radius: 999px; cursor: pointer; transition: .14s; white-space: nowrap;
+}
+.cr-buy:hover { background: #f3fbe9; transform: translateY(-1px); }
+
+.um-links { border-top: 1px solid rgba(255,255,255,.24); margin-top: 4px; padding-top: 6px; display: flex; flex-direction: column; gap: 2px; }
+.um-link {
+  display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 11px;
+  color: #fff !important; text-decoration: none; font-weight: 700; font-size: 14.5px; transition: background .14s;
+}
+.um-link i { font-size: 18px; line-height: 1; }
+.um-link:hover, .um-link:focus { background: rgba(255,255,255,.18); color: #fff; }
+.um-link > span:first-of-type { flex: 1; }
+.um-badge { background: #df433d; color: #fff; font-size: 11.5px; font-weight: 800; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; display: grid; place-items: center; box-shadow: 0 2px 5px rgba(0,0,0,.18); }
+.um-logout { color: rgba(255,255,255,.92) !important; }
 </style>
