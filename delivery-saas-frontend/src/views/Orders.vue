@@ -1199,15 +1199,24 @@ function normalizeOrder(o){
     } catch (e) { return extractAddress(o) || ''; }
   })();
 
-  // Detect prepaid/online payment (iFood "PAGO")
+  // Detect prepaid/online payment (iFood "PAGO" / aiqfome ONLINE)
   const isPrepaid = (function() {
     try {
       // iFood shape: payload.{order?.}payments = { methods, prepaid }
+      // - iFood manda `prepaid: true|false` (boolean)
+      // - aiqbridge manda `prepaid: 29.49` (Number = total pago online)
+      //   e cada method com `type: "ONLINE"` (não `prepaid`/`isOnline`)
       const pay = resolveIfoodPayments(o);
       if (pay) {
         if (pay.prepaid === true) return true;
+        if (typeof pay.prepaid === 'number' && pay.prepaid > 0) return true;
         const methods = pay.methods || [];
-        if (methods.length > 0 && methods.every(m => m.prepaid === true || m.isOnline === true)) return true;
+        if (methods.length > 0 && methods.every(m =>
+          m.prepaid === true ||
+          m.isOnline === true ||
+          String(m.type || '').toUpperCase() === 'ONLINE' ||
+          String(m.method || m.methodCode || '').toUpperCase().includes('ONLINE')
+        )) return true;
       }
       // POS / public shape: payload.payment = { methodCode, prepaid?, isOnline? }
       // Without this fallback, takeout orders paid online were getting routed

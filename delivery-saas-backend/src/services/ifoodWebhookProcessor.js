@@ -261,14 +261,21 @@ export function determineStatusFromIFoodEvent(payload, orderObj) {
       const pm = o.order?.payments || o.payment || o.payments || o.paymentMethod
                || o.payload?.order?.payments || o.payload?.payments || null;
       if (!pm) return false;
+      // iFood manda `prepaid: true|false`; aiqbridge manda `prepaid: 29.49`
+      // (Number = valor pago online) e cada method com `type: "ONLINE"`.
       if (pm.prepaid === true) return true;
+      if (typeof pm.prepaid === 'number' && pm.prepaid > 0) return true;
+      const methodIsOnline = (m) =>
+        m.prepaid === true ||
+        String(m.type || '').toUpperCase() === 'ONLINE' ||
+        String(m.method || m.methodCode || '').toUpperCase().includes('ONLINE');
       if (pm.methods && Array.isArray(pm.methods) && pm.methods.length > 0) {
-        return pm.methods.some(m => m.prepaid === true || String(m.method || m.methodCode || '').toUpperCase().includes('ONLINE'));
+        return pm.methods.some(methodIsOnline);
       }
       if (Array.isArray(pm)) {
-        return pm.some(p => p.prepaid === true || String(p.method || p.methodCode || '').toUpperCase().includes('ONLINE'));
+        return pm.some(methodIsOnline);
       }
-      return String(pm.method || pm.methodCode || '').toUpperCase().includes('ONLINE');
+      return methodIsOnline(pm);
     } catch (e) { return false; }
   }
 
@@ -494,14 +501,19 @@ async function upsertOrder({ companyId, mapped, storeId = null, merchantHint = n
         const pm = existingPayload?.order?.payments || existingPayload?.payments || existingPayload?.payment || null;
         let online = false;
         if (pm) {
-          if (pm.prepaid === true) {
+          // iFood: prepaid=true|false; aiqbridge: prepaid=Number, methods[].type="ONLINE"
+          const methodIsOnline = (p) =>
+            p.prepaid === true ||
+            String(p.type || '').toUpperCase() === 'ONLINE' ||
+            String(p.method || p.methodCode || '').toUpperCase().includes('ONLINE');
+          if (pm.prepaid === true || (typeof pm.prepaid === 'number' && pm.prepaid > 0)) {
             online = true;
           } else if (Array.isArray(pm)) {
-            online = pm.some(p => p.prepaid === true || String(p.method || p.methodCode || '').toUpperCase().includes('ONLINE'));
+            online = pm.some(methodIsOnline);
           } else if (pm.methods && Array.isArray(pm.methods) && pm.methods.length > 0) {
-            online = pm.methods.some(p => (p.prepaid === true) || String(p.method || p.methodCode || '').toUpperCase().includes('ONLINE'));
+            online = pm.methods.some(methodIsOnline);
           } else {
-            online = String(pm.method || pm.methodCode || '').toUpperCase().includes('ONLINE');
+            online = methodIsOnline(pm);
           }
         }
         const correctStatus = online ? 'CONCLUIDO' : 'CONFIRMACAO_PAGAMENTO';
