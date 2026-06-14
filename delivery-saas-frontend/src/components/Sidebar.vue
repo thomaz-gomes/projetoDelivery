@@ -223,9 +223,13 @@ const isActive = (to) => computed(() => route.path.startsWith(to));
 
 const visibleNav = computed(() => buildVisibleNav(auth.user, saas.enabledModules, nav));
 
-// Offcanvas mega-menu (template "Menu lateral"): split direct items vs. groups
-const primaryItems = computed(() => (visibleNav.value || []).filter(i => !(i.children && i.children.length)));
-const groupItems = computed(() => (visibleNav.value || []).filter(i => i.children && i.children.length));
+// Offcanvas mega-menu (template "Menu lateral"): split direct items vs. groups.
+// Bucket by the ORIGINAL nav structure (by name) — a parent whose module is
+// locked comes back from buildVisibleNav with children:[] but must still render
+// as a section, not collapse into the primary list (or vanish entirely).
+const GROUP_NAMES = new Set((nav || []).filter(i => i.children && i.children.length).map(i => i.name));
+const primaryItems = computed(() => (visibleNav.value || []).filter(i => !GROUP_NAMES.has(i.name)));
+const groupItems = computed(() => (visibleNav.value || []).filter(i => GROUP_NAMES.has(i.name)));
 
 // Distribute the primary block + groups across exactly 3 columns, in source
 // order, balanced by approximate height — so the menu fills the columns and
@@ -236,7 +240,8 @@ const navColumns = computed(() => {
     blocks.push({ type: 'primary', items: primaryItems.value, w: primaryItems.value.length + 1 });
   }
   for (const g of groupItems.value) {
-    blocks.push({ type: 'group', group: g, w: 1 + (g.children?.length || 0) });
+    // locked groups (no accessible children) still take 1 header + 1 upgrade row
+    blocks.push({ type: 'group', group: g, w: 1 + Math.max(1, g.children?.length || 0) });
   }
   const cols = [[], [], []];
   const colW = [0, 0, 0];
@@ -1004,6 +1009,17 @@ function selectMenuOption(opt){
                   <span class="material-symbols-rounded">{{ msIcon(child.to) }}</span>
                   <span class="lnk-label">{{ child.name }}</span>
                   <span v-if="child.locked" class="lock-tag"><span class="material-symbols-rounded">lock</span> Upgrade</span>
+                </router-link>
+                <!-- grupo bloqueado (módulo não assinado): mantém a seção visível -->
+                <router-link
+                  v-if="!block.group.children || !block.group.children.length"
+                  :to="block.group.to || '/store'"
+                  class="lnk is-locked"
+                  @click="offCanvasOpen = false"
+                >
+                  <span class="material-symbols-rounded">lock</span>
+                  <span class="lnk-label">Fazer upgrade</span>
+                  <span class="lock-tag"><span class="material-symbols-rounded">lock</span> Upgrade</span>
                 </router-link>
               </div>
             </template>
