@@ -496,11 +496,16 @@ async function trySendViaTemplate({ companyId, notificationType, account, to, co
   }
 }
 
-// True quando o cliente abriu (ou reabriu) a janela 24h da Meta enviando
-// mensagem inbound nas últimas 24h. Usado pra decidir entre TEXT livre
-// (preserva detalhes) e template (único caminho fora da janela).
-async function isWithinMeta24hWindow({ companyId, customerId, menuId, providerAccountId }) {
-  if (!companyId || !customerId) return false;
+// Estado da janela 24h da Meta. Tristate intencional — quando não temos
+// como confirmar com certeza (sem customerId, sem Conversation no menu/account
+// específico, etc.), retornamos 'unknown' e deixamos o sender tentar TEXT
+// primeiro (Meta arbitra via 131047/131051). Só fazemos o atalho pra template
+// quando TEMOS evidência forte de que a janela está fechada — Conversation
+// existe e `lastInboundAt` é > 24h. Isso preserva o comportamento antigo
+// (TEXT-first) em todos os casos ambíguos e adiciona o atalho de template
+// só quando ele é uma certeza necessária.
+async function metaWindowState({ companyId, customerId, menuId, providerAccountId }) {
+  if (!companyId || !customerId) return 'unknown';
   const conv = await prisma.conversation.findFirst({
     where: {
       companyId,
@@ -513,18 +518,20 @@ async function isWithinMeta24hWindow({ companyId, customerId, menuId, providerAc
     orderBy: { lastInboundAt: 'desc' },
     select: { lastInboundAt: true },
   });
-  if (!conv?.lastInboundAt) return false;
+  if (!conv) return 'unknown';
+  if (!conv.lastInboundAt) return 'unknown';
   const ageMs = Date.now() - new Date(conv.lastInboundAt).getTime();
-  return ageMs < 24 * 60 * 60 * 1000;
+  return ageMs < 24 * 60 * 60 * 1000 ? 'open' : 'closed';
 }
 
 // Send a TEXT notification via the provider chosen by pickNotificationChannel.
 //
 // Para Meta, decide o caminho ANTES de chamar a API:
-//   - Janela 24h aberta → tenta TEXT livre (preserva detalhes do pedido).
-//     Se cair em 131047/131051 mesmo assim, cascata: template → Evolution.
-//   - Janela 24h fechada (ou cliente nunca conversou) → vai direto pra
-//     template. Falha do template cascata pra Evolution.
+//   - Janela CONFIRMADA aberta ou estado desconhecido → tenta TEXT livre
+//     (preserva detalhes do pedido). Se cair em 131047/131051 mesmo assim,
+//     cascata: template → Evolution.
+//   - Janela CONFIRMADA fechada (Conversation existe e lastInboundAt > 24h)
+//     → vai direto pra template. Falha do template cascata pra Evolution.
 //
 // Returns { provider, providerAccountId, instanceName, externalId,
 // templateUsed?, fallbackUsed? } describing what actually went out.
@@ -539,16 +546,19 @@ async function sendNotificationText({
   menuId = null,
 }) {
   if (provider === 'META_WA') {
-    const withinWindow = await isWithinMeta24hWindow({
+    const windowState = await metaWindowState({
       companyId: account?.companyId,
       customerId,
       menuId,
       providerAccountId: account?.id,
     });
 
-    // Fora da janela: vai direto pra template. Free text seria garantido falhar.
-    if (!withinWindow && templateFallback?.notificationType) {
-      console.log('[notify] Meta fora da janela 24h — enviando template direto', {
+    // Janela CONFIRMADA fechada: vai direto pra template. Free text seria
+    // garantido falhar com 131047. Estado 'unknown' (sem customerId, sem
+    // Conversation, etc.) NÃO entra aqui — preserva comportamento antigo
+    // de tentar TEXT primeiro e deixar Meta arbitrar.
+    if (windowState === 'closed' && templateFallback?.notificationType) {
+      console.log('[notify] Meta janela 24h fechada (confirmado) — enviando template direto', {
         to,
         notificationType: templateFallback.notificationType,
       });
@@ -592,7 +602,10 @@ async function sendNotificationText({
       });
     }
 
-    // Dentro da janela (ou sem templateFallback): tenta TEXT livre.
+    // Janela aberta confirmada, OU estado desconhecido, OU sem templateFallback:
+    // tenta TEXT livre primeiro (preserva detalhes; comportamento antigo).
+    // Race rara: nossa Conversation diz aberta mas Meta diz fechada — adapter
+    // lança MetaWindowExpiredError e caímos no fallback abaixo.
     try {
       const result = await whatsappMetaAdapter.sendMessage(account, to, { type: 'TEXT', text });
       return {
