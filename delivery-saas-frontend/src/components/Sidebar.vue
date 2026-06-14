@@ -223,6 +223,70 @@ const isActive = (to) => computed(() => route.path.startsWith(to));
 
 const visibleNav = computed(() => buildVisibleNav(auth.user, saas.enabledModules, nav));
 
+// Offcanvas mega-menu (template "Menu lateral"): split direct items vs. groups
+const primaryItems = computed(() => (visibleNav.value || []).filter(i => !(i.children && i.children.length)));
+const groupItems = computed(() => (visibleNav.value || []).filter(i => i.children && i.children.length));
+
+function isLinkActive(to) {
+  if (!to) return false;
+  const p = route.path || '';
+  return p === to || p.startsWith(to + '/');
+}
+
+// Material Symbols (Rounded) icon per route — keeps the offcanvas faithful to
+// the template while the rest of the app continues to use Bootstrap Icons.
+const MS_ICONS = {
+  // primary
+  '/orders': 'receipt_long', '/menu/menus': 'restaurant_menu', '/customers': 'groups',
+  // Atendimento
+  '/inbox': 'support_agent', '/inbox/quick-replies': 'quickreply', '/inbox/automation': 'smart_toy',
+  // Entregadores
+  '/riders': 'sports_motorsports', '/rider-adjustments': 'account_balance_wallet',
+  '/reports/riders-dashboard': 'dashboard', '/reports/rider-ranking': 'emoji_events',
+  '/settings/rider-goals': 'flag', '/reports/rider-checkins': 'where_to_vote',
+  '/riders/map': 'map', '/settings/rider-shifts': 'schedule',
+  '/settings/rider-bonus-rules': 'redeem', '/settings/rider-tracking': 'settings',
+  // Relatórios
+  '/reports': 'bar_chart', '/sales': 'history', '/reports/revenue': 'payments',
+  '/reports/cash-fronts': 'point_of_sale', '/reports/products': 'trending_up',
+  '/reports/menu-performance': 'insights', '/relatorios/nfe-emissoes': 'description',
+  '/stock-movements': 'sync_alt',
+  // Marketing
+  '/marketing': 'campaign', '/marketing/campaigns': 'ads_click',
+  '/marketing/menu-notifications': 'notifications_active', '/marketing/studio-ia': 'auto_awesome',
+  '/affiliates': 'handshake', '/coupons': 'confirmation_number', '/settings/cashback': 'savings',
+  // Ingredientes e Estoque
+  '/ingredient-groups': 'category', '/ingredients': 'nutrition', '/technical-sheets': 'menu_book',
+  '/stock/purchase-imports': 'shopping_cart_checkout', '/stock/suppliers': 'local_shipping',
+  // Financeiro
+  '/financial/health': 'monitor_heart', '/financial/dashboard': 'dashboard',
+  '/financial/transactions': 'request_quote', '/financial/cash-flow': 'show_chart',
+  '/financial/dre': 'summarize', '/financial/accounts': 'account_balance',
+  '/financial/ofx': 'done_all', '/financial/cost-centers': 'pie_chart',
+  '/financial/recurring': 'event_repeat', '/financial/payment-methods': 'credit_card',
+  '/financial/gateways': 'percent', '/financial/settlements': 'storefront',
+  // Configurações
+  '/settings/general': 'tune', '/settings/neighborhoods': 'location_on',
+  '/settings/dados-fiscais': 'gavel', '/integrations': 'extension',
+  '/settings/payment-methods': 'credit_card', '/settings/stores': 'storefront',
+  '/settings/users': 'manage_accounts',
+  // SaaS
+  '/saas/plans': 'list_alt', '/saas/modules': 'widgets', '/saas/companies': 'apartment',
+  '/saas/gateway': 'payment', '/saas/whatsapp-config': 'chat', '/saas/evolution-config': 'hub',
+};
+// Group-header icons (parents with children)
+const MS_GROUP_ICONS = {
+  '/inbox': 'support_agent', '/riders': 'sports_motorsports', '/reports': 'bar_chart',
+  '/marketing': 'campaign', '/ingredient-groups': 'inventory_2', '/financial/health': 'account_balance',
+  '/settings/general': 'settings', '/saas': 'grid_view',
+};
+function msIcon(to) {
+  return MS_ICONS[to] || 'chevron_right';
+}
+function msGroupIcon(to) {
+  return MS_GROUP_ICONS[to] || MS_ICONS[to] || 'folder';
+}
+
 
 const planBadge = computed(() => {
   try {
@@ -856,76 +920,77 @@ function selectMenuOption(opt){
       </div>
     </header>
 
-    <!-- Off-canvas menu com toda a navegação -->
-    <div v-if="offCanvasOpen" class="offcanvas-backdrop" @click.self="offCanvasOpen = false">
-      <nav class="offcanvas-menu p-4">
-        <div class="d-flex justify-content-between align-items-start">
-        <img src="/chefiz-neg.png" alt="" class="logo-neg">
-        <button class="btn btn-close mb-4" @click="offCanvasOpen = false" aria-label="Fechar menu"></button>
-      </div>
-        <ul class="nav flex-column" style="height:100vh;">
-          <li v-for="item in visibleNav" :key="item.to" class="nav-item mb-2">
-            <!-- Item bloqueado (upgrade necessário) -->
-            <template v-if="item.locked">
-              <router-link
-                :to="item.to || '/store'"
-                class="nav-link title d-flex align-items-center text-muted"
-                style="opacity:0.55;"
-                @click="offCanvasOpen = false"
-              >
-                <i :class="item.icon + ' me-2'" aria-hidden="true"></i>
-                <span>{{ item.name }}</span>
-                <span class="badge bg-warning text-dark ms-auto d-flex align-items-center gap-1" style="font-size:0.6rem;white-space:nowrap;">
-                  <i class="bi bi-lock-fill"></i> Upgrade
-                </span>
-              </router-link>
-            </template>
-            <!-- Item normal -->
-            <template v-else>
-              <!-- Categoria (tem filhos): apenas label, sem ação de clique -->
-              <span v-if="item.children" class="nav-link title d-flex align-items-center" style="cursor:default;">
-                <i :class="item.icon + ' me-2'" aria-hidden="true"></i>
-                <span>{{ item.name }}</span>
-              </span>
-              <!-- Link direto (sem filhos): clicável com estilo de link -->
-              <router-link v-else :to="item.to" :class="['nav-link','title','nav-direct-link','d-flex','align-items-center', item.to === '/orders' ? 'nav-pedidos-link' : '']" @click="offCanvasOpen = false">
-                <i :class="item.icon + ' me-2'" aria-hidden="true"></i>
-                <span>{{ item.name }}</span>
-                <span v-if="item.to === '/billing' && addOnStore.pendingInvoiceCount" class="badge bg-danger ms-auto">{{ addOnStore.pendingInvoiceCount }}</span>
-                <span v-if="item.to === '/inbox' && inboxStore.unreadTotal" class="badge bg-success ms-auto">{{ inboxStore.unreadTotal }}</span>
-                <i class="bi bi-chevron-right ms-auto" style="font-size:0.75rem;opacity:0.6;" aria-hidden="true"></i>
-              </router-link>
-              <ul v-if="item.children" class="nav flex-column ms-3">
-                <li v-for="child in item.children" :key="child.to" class="nav-item mb-1">
-                  <!-- Filho bloqueado -->
-                  <template v-if="child.locked">
-                    <router-link
-                      :to="child.to || '/store'"
-                      class="nav-link d-flex align-items-center text-muted"
-                      style="opacity:0.55;"
-                      @click="offCanvasOpen = false"
-                    >
-                      <i :class="child.icon + ' me-2'" aria-hidden="true"></i>
-                      <span>{{ child.name }}</span>
-                      <span class="badge bg-warning text-dark ms-auto d-flex align-items-center gap-1" style="font-size:0.6rem;white-space:nowrap;">
-                        <i class="bi bi-lock-fill"></i> Upgrade
-                      </span>
-                    </router-link>
-                  </template>
-                  <!-- Filho normal -->
-                  <template v-else>
-                    <router-link :to="child.to" class="nav-link d-flex align-items-center" @click="offCanvasOpen = false">
-                      <i :class="child.icon + ' me-2'" aria-hidden="true"></i>
-                      <span>{{ child.name }}</span>
-                    </router-link>
-                  </template>
-                </li>
-              </ul>
-            </template>
-          </li>
-          <li class="mt-auto pt-2"></li>
-        </ul>
-      </nav>
+    <!-- Off-canvas mega-menu (template "Menu lateral") -->
+    <div v-if="offCanvasOpen" class="mega-scrim" @click.self="offCanvasOpen = false">
+      <aside class="mega-oc" aria-label="Menu principal">
+        <!-- Header: logo atual + subtítulo + fechar -->
+        <div class="oc-head">
+          <div class="oc-brand">
+            <img src="/chefiz.png" alt="Chefiz" class="oc-logo-img">
+            <div class="oc-sub">Painel do restaurante</div>
+          </div>
+          <button class="oc-close" @click="offCanvasOpen = false" aria-label="Fechar menu">
+            <span class="material-symbols-rounded">close</span>
+          </button>
+        </div>
+
+        <!-- Body: itens primários + grupos em colunas -->
+        <nav class="oc-body">
+          <!-- Itens diretos (sem filhos) em destaque -->
+          <div v-if="primaryItems.length" class="oc-primary">
+            <router-link
+              v-for="item in primaryItems"
+              :key="item.to"
+              :to="item.to || '/store'"
+              class="prim"
+              :class="{ 'is-locked': item.locked }"
+              @click="offCanvasOpen = false"
+            >
+              <span class="prim-ic"><span class="material-symbols-rounded">{{ msIcon(item.to) }}</span></span>
+              <span class="prim-label">{{ item.name }}</span>
+              <span v-if="item.locked" class="lock-tag"><span class="material-symbols-rounded">lock</span> Upgrade</span>
+              <span v-else-if="item.to === '/billing' && addOnStore.pendingInvoiceCount" class="lnk-badge danger">{{ addOnStore.pendingInvoiceCount }}</span>
+              <span v-else-if="item.to === '/inbox' && inboxStore.unreadTotal" class="lnk-badge">{{ inboxStore.unreadTotal }}</span>
+              <span v-else class="prim-chev material-symbols-rounded">chevron_right</span>
+            </router-link>
+          </div>
+
+          <!-- Grupos (itens com filhos) -->
+          <div v-for="group in groupItems" :key="group.to" class="grp">
+            <div class="grp-head">
+              <span class="grp-ic"><span class="material-symbols-rounded">{{ msGroupIcon(group.to) }}</span></span>
+              <span class="grp-title">{{ group.name }}</span>
+              <span class="grp-rule"></span>
+            </div>
+            <router-link
+              v-for="child in group.children"
+              :key="child.to"
+              :to="child.to || '/store'"
+              class="lnk"
+              :class="{ active: isLinkActive(child.to), 'is-locked': child.locked }"
+              @click="offCanvasOpen = false"
+            >
+              <span class="material-symbols-rounded">{{ msIcon(child.to) }}</span>
+              <span class="lnk-label">{{ child.name }}</span>
+              <span v-if="child.locked" class="lock-tag"><span class="material-symbols-rounded">lock</span> Upgrade</span>
+            </router-link>
+          </div>
+        </nav>
+
+        <!-- Footer: usuário + sair -->
+        <div class="oc-foot">
+          <div class="oc-user">
+            <span class="oc-av">{{ userInitials }}</span>
+            <div class="oc-user-meta">
+              <div class="oc-uname">{{ userName }}</div>
+              <div class="oc-urole">{{ userRoleLabel }}</div>
+            </div>
+          </div>
+          <button class="oc-logout" @click="logout()">
+            <span class="material-symbols-rounded">logout</span> Sair
+          </button>
+        </div>
+      </aside>
     </div>
 
     <!-- Modal para adicionar link (placeholder) -->
@@ -1180,30 +1245,133 @@ aside nav { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.12) trans
   min-height: 64px;
   z-index: 1020;
 }
-.offcanvas-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0,0,0,0.32);
-  z-index: 2000;
-  display: flex;
-  align-items: flex-start;
+/* ===================== Off-canvas mega-menu (template "Menu lateral") ===================== */
+.mega-oc {
+  --mg-surface: #ffffff; --mg-surface-2: #f6f8f9; --mg-border: #e8edf0; --mg-border-strong: #d6dde2;
+  --mg-ink: #16222c; --mg-ink-2: #3a4853; --mg-muted: #6c7a85; --mg-faint: #9aa6af;
+  --mg-brand: #5ea829; --mg-brand-ink: #467f1d; --mg-brand-dark: #3f761b;
+  --mg-brand-soft: #edf6e2; --mg-brand-soft-border: #d6ebbf; --mg-danger: #df433d;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
-.offcanvas-menu {
-  background: #89d136;
-  min-width: 280px;
-  max-width: 90vw;
-  min-height: 100vh;
-  box-shadow: 2px 0 16px rgba(0,0,0,0.08);
-  border-radius: 0 12px 12px 0;
-  animation: slideInLeft 0.22s cubic-bezier(.4,1.3,.6,1) both;
-  text-align:right;
+.mega-scrim {
+  position: fixed; inset: 0; z-index: 2000;
+  background: rgba(13,26,8,.46); backdrop-filter: blur(2px);
+  display: flex; align-items: stretch;
+  animation: mega-fade .2s ease;
 }
-@keyframes slideInLeft {
-  from { transform: translateX(-100%); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+@keyframes mega-fade { from { opacity: 0; } }
+.mega-oc {
+  position: relative; height: 100%; width: min(780px, 95vw);
+  background: var(--mg-surface); color: var(--mg-ink);
+  box-shadow: 0 30px 80px rgba(16,32,12,.30), 0 8px 24px rgba(16,32,12,.16);
+  display: flex; flex-direction: column;
+  border-top-right-radius: 20px; border-bottom-right-radius: 20px;
+  animation: mega-slide .34s cubic-bezier(.22,.7,.25,1);
+}
+@keyframes mega-slide { from { transform: translateX(-104%); } to { transform: translateX(0); } }
+
+/* header */
+.mega-oc .oc-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 16px 22px; border-bottom: 1px solid var(--mg-border); flex-shrink: 0;
+  background: linear-gradient(180deg, #ffffff, #fbfdf9);
+}
+.mega-oc .oc-brand { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.mega-oc .oc-logo-img { height: 30px; width: auto; object-fit: contain; }
+.mega-oc .oc-sub { font-size: 12px; color: var(--mg-faint); font-weight: 600; }
+.mega-oc .oc-close {
+  width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--mg-border);
+  background: var(--mg-surface); color: var(--mg-muted); display: grid; place-items: center;
+  cursor: pointer; transition: .15s; flex-shrink: 0;
+}
+.mega-oc .oc-close:hover { background: #fdecec; color: var(--mg-danger); border-color: #f6d4d2; transform: rotate(90deg); }
+
+/* body — 3 columns via multi-column flow (auto-distributes dynamic nav) */
+.mega-oc .oc-body {
+  padding: 18px 22px 26px; overflow-y: auto; flex: 1;
+  column-count: 3; column-gap: 22px;
+}
+.mega-oc .oc-primary, .mega-oc .grp { break-inside: avoid; }
+
+/* primary items */
+.mega-oc .oc-primary {
+  display: flex; flex-direction: column; gap: 6px;
+  padding-bottom: 14px; margin-bottom: 8px; border-bottom: 1px dashed var(--mg-border-strong);
+}
+.mega-oc .prim {
+  display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 12px;
+  cursor: pointer; text-decoration: none; color: var(--mg-ink); transition: .14s; border: 1px solid transparent;
+}
+.mega-oc .prim:hover { background: var(--mg-brand-soft); border-color: var(--mg-brand-soft-border); }
+.mega-oc .prim-ic {
+  width: 38px; height: 38px; border-radius: 10px; background: var(--mg-brand-soft); color: var(--mg-brand-ink);
+  display: grid; place-items: center; flex-shrink: 0; transition: .14s;
+}
+.mega-oc .prim:hover .prim-ic { background: var(--mg-brand); color: #fff; }
+.mega-oc .prim-ic .material-symbols-rounded { font-size: 22px; }
+.mega-oc .prim-label { font-weight: 700; font-size: 15px; letter-spacing: -.01em; flex: 1; }
+.mega-oc .prim-chev { color: var(--mg-faint); font-size: 20px; transition: transform .14s; }
+.mega-oc .prim:hover .prim-chev { color: var(--mg-brand-ink); transform: translateX(2px); }
+
+/* group */
+.mega-oc .grp { margin-top: 12px; }
+.mega-oc .grp-head { display: flex; align-items: center; gap: 9px; padding: 0 4px 7px; }
+.mega-oc .grp-ic {
+  width: 26px; height: 26px; border-radius: 8px; background: var(--mg-brand-soft); color: var(--mg-brand-ink);
+  display: grid; place-items: center; flex-shrink: 0;
+}
+.mega-oc .grp-ic .material-symbols-rounded { font-size: 17px; font-variation-settings: 'FILL' 1, 'wght' 500; }
+.mega-oc .grp-title { font-size: 11.5px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--mg-muted); white-space: nowrap; }
+.mega-oc .grp-rule { flex: 1; height: 1px; background: var(--mg-border); border-radius: 1px; }
+
+/* nav link */
+.mega-oc .lnk {
+  display: flex; align-items: center; gap: 11px; padding: 8px 10px; border-radius: 9px; cursor: pointer;
+  text-decoration: none; color: var(--mg-ink-2); font-weight: 600; font-size: 13.5px;
+  transition: background .13s, color .13s; position: relative;
+}
+.mega-oc .lnk .material-symbols-rounded { font-size: 20px; color: var(--mg-faint); transition: color .13s; flex-shrink: 0; }
+.mega-oc .lnk-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mega-oc .lnk:hover { background: var(--mg-surface-2); color: var(--mg-ink); }
+.mega-oc .lnk:hover .material-symbols-rounded { color: var(--mg-brand-ink); }
+.mega-oc .lnk.active { background: var(--mg-brand-soft); color: var(--mg-brand-ink); font-weight: 700; box-shadow: inset 3px 0 0 var(--mg-brand); }
+.mega-oc .lnk.active .material-symbols-rounded { color: var(--mg-brand-ink); font-variation-settings: 'FILL' 1, 'wght' 500; }
+.mega-oc .lnk-badge { margin-left: auto; font-size: 10.5px; font-weight: 800; background: var(--mg-brand); color: #fff; border-radius: 999px; padding: 1px 7px; }
+.mega-oc .lnk-badge.danger, .mega-oc .prim .lnk-badge { background: var(--mg-danger); }
+.mega-oc .prim .lnk-badge { margin-left: 0; }
+
+/* locked items */
+.mega-oc .is-locked { opacity: .6; }
+.mega-oc .lock-tag {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;
+  font-size: 10px; font-weight: 800; color: #9a6400; background: #fcf1da; border-radius: 999px; padding: 2px 7px;
+}
+.mega-oc .lock-tag .material-symbols-rounded { font-size: 13px; color: #9a6400; }
+
+/* footer */
+.mega-oc .oc-foot {
+  flex-shrink: 0; border-top: 1px solid var(--mg-border); padding: 12px 22px;
+  display: flex; align-items: center; gap: 12px; background: var(--mg-surface-2);
+}
+.mega-oc .oc-user { display: flex; align-items: center; gap: 11px; flex: 1; min-width: 0; }
+.mega-oc .oc-av { width: 36px; height: 36px; border-radius: 50%; background: var(--mg-brand); color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 13px; flex-shrink: 0; }
+.mega-oc .oc-user-meta { min-width: 0; }
+.mega-oc .oc-uname { font-weight: 700; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mega-oc .oc-urole { font-size: 11px; color: var(--mg-faint); font-weight: 700; letter-spacing: .05em; }
+.mega-oc .oc-logout {
+  display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; color: var(--mg-muted);
+  background: var(--mg-surface); border: 1px solid var(--mg-border); border-radius: 9px; padding: 8px 13px;
+  cursor: pointer; transition: .14s; flex-shrink: 0;
+}
+.mega-oc .oc-logout:hover { color: var(--mg-danger); border-color: #f6d4d2; background: #fdecec; }
+.mega-oc .oc-logout .material-symbols-rounded { font-size: 18px; }
+
+.mega-oc .oc-body::-webkit-scrollbar { width: 10px; }
+.mega-oc .oc-body::-webkit-scrollbar-thumb { background: #dde3e7; border-radius: 999px; border: 3px solid var(--mg-surface); }
+.mega-oc .oc-body::-webkit-scrollbar-thumb:hover { background: #c8d0d5; }
+
+@media (max-width: 720px) {
+  .mega-oc .oc-body { column-count: 1; }
 }
 .quick-shortcuts .shortcut-btn {
   background: #f8f9fa;
