@@ -227,6 +227,35 @@ const visibleNav = computed(() => buildVisibleNav(auth.user, saas.enabledModules
 const primaryItems = computed(() => (visibleNav.value || []).filter(i => !(i.children && i.children.length)));
 const groupItems = computed(() => (visibleNav.value || []).filter(i => i.children && i.children.length));
 
+// Distribute the primary block + groups across exactly 3 columns, in source
+// order, balanced by approximate height — so the menu fills the columns and
+// runs up to the third without leaving large gaps (no balanced multicol orphans).
+const navColumns = computed(() => {
+  const blocks = [];
+  if (primaryItems.value.length) {
+    blocks.push({ type: 'primary', items: primaryItems.value, w: primaryItems.value.length + 1 });
+  }
+  for (const g of groupItems.value) {
+    blocks.push({ type: 'group', group: g, w: 1 + (g.children?.length || 0) });
+  }
+  const cols = [[], [], []];
+  const colW = [0, 0, 0];
+  const total = blocks.reduce((s, b) => s + b.w, 0);
+  const target = total / 3 || 1;
+  let ci = 0;
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i];
+    const colsLeft = 2 - ci;
+    const remaining = blocks.length - i;
+    // advance to next column when the current one is "full enough" and there
+    // are still enough blocks left to fill the remaining columns
+    if (ci < 2 && colW[ci] > 0 && colW[ci] + b.w > target * 1.15 && remaining > colsLeft) ci++;
+    cols[ci].push(b);
+    colW[ci] += b.w;
+  }
+  return cols;
+});
+
 function isLinkActive(to) {
   if (!to) return false;
   const p = route.path || '';
@@ -934,46 +963,50 @@ function selectMenuOption(opt){
           </button>
         </div>
 
-        <!-- Body: itens primários + grupos em colunas -->
+        <!-- Body: itens primários + grupos distribuídos em 3 colunas -->
         <nav class="oc-body">
-          <!-- Itens diretos (sem filhos) em destaque -->
-          <div v-if="primaryItems.length" class="oc-primary">
-            <router-link
-              v-for="item in primaryItems"
-              :key="item.to"
-              :to="item.to || '/store'"
-              class="prim"
-              :class="{ 'is-locked': item.locked }"
-              @click="offCanvasOpen = false"
-            >
-              <span class="prim-ic"><span class="material-symbols-rounded">{{ msIcon(item.to) }}</span></span>
-              <span class="prim-label">{{ item.name }}</span>
-              <span v-if="item.locked" class="lock-tag"><span class="material-symbols-rounded">lock</span> Upgrade</span>
-              <span v-else-if="item.to === '/billing' && addOnStore.pendingInvoiceCount" class="lnk-badge danger">{{ addOnStore.pendingInvoiceCount }}</span>
-              <span v-else-if="item.to === '/inbox' && inboxStore.unreadTotal" class="lnk-badge">{{ inboxStore.unreadTotal }}</span>
-              <span v-else class="prim-chev material-symbols-rounded">chevron_right</span>
-            </router-link>
-          </div>
+          <div v-for="(col, ci) in navColumns" :key="ci" class="oc-col">
+            <template v-for="(block, bi) in col" :key="bi">
+              <!-- Bloco de itens diretos (sem filhos) em destaque -->
+              <div v-if="block.type === 'primary'" class="oc-primary">
+                <router-link
+                  v-for="item in block.items"
+                  :key="item.to"
+                  :to="item.to || '/store'"
+                  class="prim"
+                  :class="{ 'is-locked': item.locked }"
+                  @click="offCanvasOpen = false"
+                >
+                  <span class="prim-ic"><span class="material-symbols-rounded">{{ msIcon(item.to) }}</span></span>
+                  <span class="prim-label">{{ item.name }}</span>
+                  <span v-if="item.locked" class="lock-tag"><span class="material-symbols-rounded">lock</span> Upgrade</span>
+                  <span v-else-if="item.to === '/billing' && addOnStore.pendingInvoiceCount" class="lnk-badge danger">{{ addOnStore.pendingInvoiceCount }}</span>
+                  <span v-else-if="item.to === '/inbox' && inboxStore.unreadTotal" class="lnk-badge">{{ inboxStore.unreadTotal }}</span>
+                  <span v-else class="prim-chev material-symbols-rounded">chevron_right</span>
+                </router-link>
+              </div>
 
-          <!-- Grupos (itens com filhos) -->
-          <div v-for="group in groupItems" :key="group.to" class="grp">
-            <div class="grp-head">
-              <span class="grp-ic"><span class="material-symbols-rounded">{{ msGroupIcon(group.to) }}</span></span>
-              <span class="grp-title">{{ group.name }}</span>
-              <span class="grp-rule"></span>
-            </div>
-            <router-link
-              v-for="child in group.children"
-              :key="child.to"
-              :to="child.to || '/store'"
-              class="lnk"
-              :class="{ active: isLinkActive(child.to), 'is-locked': child.locked }"
-              @click="offCanvasOpen = false"
-            >
-              <span class="material-symbols-rounded">{{ msIcon(child.to) }}</span>
-              <span class="lnk-label">{{ child.name }}</span>
-              <span v-if="child.locked" class="lock-tag"><span class="material-symbols-rounded">lock</span> Upgrade</span>
-            </router-link>
+              <!-- Grupo (item com filhos) -->
+              <div v-else class="grp">
+                <div class="grp-head">
+                  <span class="grp-ic"><span class="material-symbols-rounded">{{ msGroupIcon(block.group.to) }}</span></span>
+                  <span class="grp-title">{{ block.group.name }}</span>
+                  <span class="grp-rule"></span>
+                </div>
+                <router-link
+                  v-for="child in block.group.children"
+                  :key="child.to"
+                  :to="child.to || '/store'"
+                  class="lnk"
+                  :class="{ active: isLinkActive(child.to), 'is-locked': child.locked }"
+                  @click="offCanvasOpen = false"
+                >
+                  <span class="material-symbols-rounded">{{ msIcon(child.to) }}</span>
+                  <span class="lnk-label">{{ child.name }}</span>
+                  <span v-if="child.locked" class="lock-tag"><span class="material-symbols-rounded">lock</span> Upgrade</span>
+                </router-link>
+              </div>
+            </template>
           </div>
         </nav>
 
@@ -1286,12 +1319,12 @@ aside nav { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.12) trans
 }
 .mega-oc .oc-close:hover { background: #fdecec; color: var(--mg-danger); border-color: #f6d4d2; transform: rotate(90deg); }
 
-/* body — 3 columns via multi-column flow (auto-distributes dynamic nav) */
+/* body — 3 balanced columns (distributed in JS, source order preserved) */
 .mega-oc .oc-body {
-  padding: 18px 22px 26px; overflow-y: auto; flex: 1;
-  column-count: 3; column-gap: 22px;
+  padding: 18px 22px 26px; overflow-y: auto; flex: 1; min-height: 0;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 22px; align-content: start;
 }
-.mega-oc .oc-primary, .mega-oc .grp { break-inside: avoid; }
+.mega-oc .oc-col { display: flex; flex-direction: column; min-width: 0; }
 
 /* primary items */
 .mega-oc .oc-primary {
@@ -1371,7 +1404,7 @@ aside nav { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.12) trans
 .mega-oc .oc-body::-webkit-scrollbar-thumb:hover { background: #c8d0d5; }
 
 @media (max-width: 720px) {
-  .mega-oc .oc-body { column-count: 1; }
+  .mega-oc .oc-body { grid-template-columns: 1fr; }
 }
 .quick-shortcuts .shortcut-btn {
   background: #f8f9fa;
